@@ -1,5 +1,6 @@
 import os
 import torch
+import unicodedata
 from PIL import Image
 from typing import List
 from vietocr.tool.predictor import Predictor
@@ -24,12 +25,22 @@ class VietOCREngine:
             if pil_img.width < 5 or pil_img.height < 5:
                 return ""
             text = self.detector.predict(pil_img)
-            return text.strip() if text else ""
+            if text:
+                return unicodedata.normalize('NFC', text.strip())
+            return ""
         except Exception as e:
             return ""
 
     def predict_batch(self, pil_imgs: List[Image.Image]) -> List[str]:
-        results = []
-        for img in pil_imgs:
-            results.append(self.predict_crop(img))
-        return results
+        if not pil_imgs:
+            return []
+        try:
+            results = self.detector.predict_batch(pil_imgs)
+            return [unicodedata.normalize('NFC', text.strip()) if text else "" for text in results]
+        except Exception as e:
+            results = []
+            for img in pil_imgs:
+                results.append(self.predict_crop(img))
+            return results
+
+

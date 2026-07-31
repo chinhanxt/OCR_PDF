@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Link, Unlink, ExternalLink, Layers, Eye, FileText, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Link, Unlink, ExternalLink, Layers, Eye, FileText, CheckCircle2, Sparkles } from 'lucide-react';
 
 export default function DualViewer({ resultData }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -43,10 +43,13 @@ export default function DualViewer({ resultData }) {
     );
   }
 
-  const pages = resultData.data.result.pages;
+  const pages = resultData.data.result.pages || [];
   const totalPages = pages.length;
-  const activePage = pages[currentPage - 1];
-  const isDoclingMode = resultData.data.result.engine === 'docling';
+  const activePage = pages[currentPage - 1] || pages[0] || { ocr_items: [], width: 600, height: 800 };
+  const ocrItems = activePage.ocr_items || [];
+  const engineMode = resultData.data.result.engine || 'paddleocr';
+  const isGeminiMode = engineMode === 'gemini';
+  const isDoclingMode = engineMode === 'docling';
 
   const imgSubPath = activePage?.image_path ? activePage.image_path.split('/').slice(-2).join('/') : '';
   const pageImgUrl = `http://localhost:8000/storage/pages/${imgSubPath}`;
@@ -84,7 +87,7 @@ export default function DualViewer({ resultData }) {
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>Khung Bounding Box OCR ({activePage.ocr_items.length} Khối)</span>
+              <span>Bố cục Tờ Giấy Kĩ thuật số ({ocrItems.length} Khối chữ)</span>
             </button>
 
             <button
@@ -94,7 +97,7 @@ export default function DualViewer({ resultData }) {
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>Văn bản Digital Sạch</span>
+              <span>Văn bản Dòng</span>
             </button>
 
             <button
@@ -104,7 +107,7 @@ export default function DualViewer({ resultData }) {
               }`}
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>Layer Searchable PDF</span>
+              <span>Searchable PDF</span>
             </button>
           </div>
         </div>
@@ -152,7 +155,7 @@ export default function DualViewer({ resultData }) {
         >
           <div className="w-full flex justify-between items-center mb-2 px-2 shrink-0 sticky top-0 bg-white/90 backdrop-blur z-20 py-1.5 border-b border-slate-100">
             <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Trang PDF Gốc (Original Scan)</span>
-            <span className="text-[10px] text-slate-400 font-mono">{activePage.width}x{activePage.height} pt</span>
+            <span className="text-[10px] text-slate-400 font-mono">{activePage.width || 600}x{activePage.height || 800} pt</span>
           </div>
           <div className="w-full flex justify-center items-start">
             <img
@@ -164,45 +167,49 @@ export default function DualViewer({ resultData }) {
           </div>
         </div>
 
-        {/* Right Side: Scan Overlay / Searchable Layer */}
+        {/* Right Side: Clean Digital Extracted Document (No Original Image Background) */}
         <div
           ref={rightRef}
           onScroll={handleRightScroll}
-          className="bg-white rounded-xl p-3 overflow-auto flex flex-col items-center border border-slate-200 shadow-sm relative"
+          className="bg-slate-50 rounded-xl p-3 overflow-auto flex flex-col items-center border border-slate-200 shadow-sm relative"
         >
-          <div className="w-full flex justify-between items-center mb-2 px-2 shrink-0 sticky top-0 bg-white/90 backdrop-blur z-20 py-1.5 border-b border-slate-100">
+          <div className="w-full flex justify-between items-center mb-2 px-2 shrink-0 sticky top-0 bg-white/90 backdrop-blur z-20 py-1.5 border-b border-slate-200 rounded-t-lg shadow-xs">
             <span className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center space-x-1.5">
-              <span>{isDoclingMode ? 'Kết quả Bóc tách Docling AI' : 'Kết quả OCR PaddleOCR GPU'}</span>
+              <Sparkles className="w-4 h-4 text-cyan-600" />
+              <span>
+                {isGeminiMode ? `Kết quả Quét Gemini 2.5 AI (${resultData.data.result.model_name || 'gemini-2.5-flash'})` : isDoclingMode ? 'Kết quả Bóc tách Docling AI' : 'Kết quả OCR PaddleOCR GPU'}
+              </span>
             </span>
             <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center space-x-1">
               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-              <span>Đã bóc tách {activePage.ocr_items.length} khối chữ</span>
+              <span>Đã bóc tách {ocrItems.length} khối chữ</span>
             </span>
           </div>
 
-          <div className="w-full flex justify-center items-start">
+          <div className="w-full flex justify-center items-start py-2">
             {rightViewMode === 'bboxes' && (
+              /* CLEAN WHITE DIGITAL PAPER SHEET CANVAS - NO ORIGINAL SCAN IMAGE BACKGROUND */
               <div
-                className="relative shadow-lg rounded border border-slate-300 bg-white transition-all duration-150 overflow-hidden"
+                className="relative shadow-xl rounded-lg border border-slate-300 bg-white transition-all duration-150 overflow-hidden"
                 style={{
                   width: `${zoom}%`,
-                  aspectRatio: `${activePage.width} / ${activePage.height}`
+                  aspectRatio: `${activePage.width || 600} / ${activePage.height || 800}`,
+                  boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
                 }}
               >
-                {/* Background image dimmed slightly so bounding boxes POP */}
-                <img
-                  src={pageImgUrl}
-                  alt={`Scanned Page ${currentPage}`}
-                  className="w-full h-full object-contain brightness-95 opacity-85"
-                />
+                {/* Subtle paper background grid pattern */}
+                <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:16px_16px] opacity-40 pointer-events-none" />
 
-                {/* VISIBLE HIGH-CONTRAST BOUNDING BOX OVERLAY */}
-                {activePage.ocr_items.map((item) => {
-                  const [x0, y0, x1, y1] = item.bbox;
-                  const leftPct = (x0 / activePage.width) * 100;
-                  const topPct = (y0 / activePage.height) * 100;
-                  const widthPct = Math.max(0.5, ((x1 - x0) / activePage.width) * 100);
-                  const heightPct = Math.max(0.5, ((y1 - y0) / activePage.height) * 100);
+                {/* RENDER ACTUAL EXTRACTED TEXT BLOCKS DIRECTLY ON THE DIGITAL PAPER */}
+                {ocrItems.map((item) => {
+                  const bbox = item.bbox || [0, 0, 10, 10];
+                  const [x0, y0, x1, y1] = bbox;
+                  const pageWidth = activePage.width || 600;
+                  const pageHeight = activePage.height || 800;
+                  const leftPct = (x0 / pageWidth) * 100;
+                  const topPct = (y0 / pageHeight) * 100;
+                  const widthPct = Math.max(1.0, ((x1 - x0) / pageWidth) * 100);
+                  const heightPct = Math.max(1.0, ((y1 - y0) / pageHeight) * 100);
                   const isHovered = hoveredBoxId === item.id;
 
                   return (
@@ -217,21 +224,28 @@ export default function DualViewer({ resultData }) {
                         width: `${widthPct}%`,
                         height: `${heightPct}%`,
                       }}
-                      className={`border transition-all cursor-pointer rounded-xs flex items-center ${
+                      className={`transition-all cursor-pointer rounded-xs flex items-center px-1 overflow-hidden border ${
                         isHovered
-                          ? 'border-emerald-500 bg-emerald-400/40 z-30 ring-2 ring-emerald-400 scale-[1.02]'
+                          ? 'border-emerald-500 bg-emerald-100 z-30 ring-2 ring-emerald-400 scale-[1.01] shadow-md'
+                          : isGeminiMode
+                          ? 'border-cyan-200/80 bg-cyan-50/70 hover:border-cyan-400 hover:bg-cyan-100/90'
                           : isDoclingMode
-                          ? 'border-purple-500/70 bg-purple-500/20 hover:bg-purple-500/40'
-                          : 'border-blue-500/70 bg-blue-500/20 hover:bg-blue-500/40'
+                          ? 'border-purple-200/80 bg-purple-50/70 hover:border-purple-400 hover:bg-purple-100/90'
+                          : 'border-blue-200/80 bg-blue-50/70 hover:border-blue-400 hover:bg-blue-100/90'
                       }`}
-                      title={`${item.text} (${(item.confidence * 100).toFixed(1)}%)`}
+                      title={`${item.text} (${((item.confidence || 0.95) * 100).toFixed(1)}%)`}
                     >
-                      {/* Floating tooltip preview */}
-                      <span className={`text-[10px] font-medium leading-none px-1 py-0.5 rounded absolute -top-5 left-0 z-40 pointer-events-none shadow transition ${
-                        isHovered ? 'bg-emerald-700 text-white font-bold opacity-100 scale-110' : 'bg-slate-900/90 text-slate-100 opacity-0 group-hover:opacity-100'
-                      }`}>
+                      {/* RENDER ACTUAL TEXT CONTENT ON DIGITAL SHEET */}
+                      <span className="text-[11px] font-sans font-medium text-slate-900 leading-tight whitespace-nowrap overflow-hidden text-ellipsis select-text">
                         {item.text}
                       </span>
+
+                      {/* Tooltip preview on hover */}
+                      {isHovered && (
+                        <span className="text-[10px] font-mono leading-none px-2 py-1 rounded absolute -top-7 left-0 z-40 bg-slate-900 text-white font-bold shadow-lg whitespace-nowrap">
+                          {item.text} ({(item.confidence * 100).toFixed(0)}%)
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -240,27 +254,28 @@ export default function DualViewer({ resultData }) {
 
             {rightViewMode === 'digital' && (
               <div
-                className="bg-white rounded-lg border border-slate-300 p-8 shadow-sm text-slate-800 space-y-3 font-sans overflow-auto"
+                className="bg-white rounded-xl border border-slate-300 p-8 shadow-xl text-slate-800 space-y-3 font-sans overflow-auto"
                 style={{ width: `${zoom}%`, minHeight: '800px' }}
               >
                 <div className="border-b border-slate-200 pb-3 mb-4 flex justify-between items-center">
-                  <h4 className="text-sm font-bold text-blue-800 uppercase tracking-wide">
-                    📄 Văn bản Kĩ thuật số Được Bóc Tách (Trang {currentPage})
+                  <h4 className="text-sm font-bold text-blue-800 uppercase tracking-wide flex items-center space-x-1.5">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    <span>Văn bản Kĩ thuật số Được Bóc Tách (Trang {currentPage})</span>
                   </h4>
-                  <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">
-                    {activePage.ocr_items.length} Khối chữ
+                  <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-bold">
+                    {ocrItems.length} Khối chữ
                   </span>
                 </div>
 
                 <div className="space-y-2">
-                  {activePage.ocr_items.map((item, idx) => (
+                  {ocrItems.map((item, idx) => (
                     <div
                       key={item.id || idx}
-                      className="p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-md transition text-sm flex items-start justify-between"
+                      className="p-3 bg-slate-50 hover:bg-cyan-50/50 border border-slate-200 hover:border-cyan-300 rounded-lg transition text-sm flex items-start justify-between shadow-2xs"
                     >
-                      <span className="font-medium text-slate-900 leading-relaxed">{item.text}</span>
-                      <span className="text-[10px] font-mono text-slate-400 shrink-0 ml-3 bg-white px-1.5 py-0.5 rounded border border-slate-200">
-                        {(item.confidence * 100).toFixed(0)}%
+                      <span className="font-medium text-slate-900 leading-relaxed font-sans">{item.text}</span>
+                      <span className="text-[10px] font-mono text-slate-400 shrink-0 ml-3 bg-white px-2 py-0.5 rounded border border-slate-200 font-semibold">
+                        {((item.confidence || 0.95) * 100).toFixed(0)}%
                       </span>
                     </div>
                   ))}
@@ -273,7 +288,7 @@ export default function DualViewer({ resultData }) {
                 src={pdfUrl}
                 title="Searchable PDF Preview"
                 style={{ width: `${zoom}%`, height: '100%', minHeight: '800px' }}
-                className="rounded border border-slate-200 bg-white shadow"
+                className="rounded-xl border border-slate-200 bg-white shadow-xl"
               />
             )}
           </div>

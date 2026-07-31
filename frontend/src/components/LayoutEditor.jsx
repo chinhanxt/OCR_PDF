@@ -36,31 +36,31 @@ export default function LayoutEditor({ resultData }) {
       return {
         document_total_pages: totalPages,
         pages: pages.map(p => ({
-          page_number: p.page_number,
-          total_items: p.ocr_items.length,
-          width: p.width,
-          height: p.height,
-          ocr_items: p.ocr_items.map(it => ({
-            id: it.id,
-            text: it.text,
-            confidence: Number((it.confidence * 100).toFixed(1)),
-            bbox: it.bbox.map(n => Number(n.toFixed(1)))
+          page_number: p.page_number || 1,
+          total_items: (p.ocr_items || []).length,
+          width: p.width || 600,
+          height: p.height || 800,
+          ocr_items: (p.ocr_items || []).map(it => ({
+            id: it.id || '',
+            text: it.text || '',
+            confidence: Number(((it.confidence || 0.95) * 100).toFixed(1)),
+            bbox: (it.bbox || [0, 0, 10, 10]).map(n => Number((n || 0).toFixed(1)))
           }))
         }))
       };
     }
 
     return {
-      page_number: activePage.page_number,
+      page_number: activePage?.page_number || 1,
       total_pages: totalPages,
-      width: activePage.width,
-      height: activePage.height,
+      width: activePage?.width || 600,
+      height: activePage?.height || 800,
       total_items: filteredItems.length,
       ocr_items: filteredItems.map(it => ({
-        id: it.id,
-        text: it.text,
-        confidence: Number((it.confidence * 100).toFixed(1)),
-        bbox: it.bbox.map(n => Number(n.toFixed(1)))
+        id: it.id || '',
+        text: it.text || '',
+        confidence: Number(((it.confidence || 0.95) * 100).toFixed(1)),
+        bbox: (it.bbox || [0, 0, 10, 10]).map(n => Number((n || 0).toFixed(1)))
       }))
     };
   }, [activePage, pages, totalPages, viewMode, filteredItems]);
@@ -191,9 +191,21 @@ export default function LayoutEditor({ resultData }) {
           {/* Header Metadata Info Bar */}
           <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 font-sans text-xs">
             <div className="flex items-center space-x-2">
-              <span className="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full font-bold flex items-center space-x-1">
-                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                <span>PaddleOCR + VietOCR Output</span>
+              <span className={`px-2.5 py-1 rounded-full font-bold flex items-center space-x-1 ${
+                resultData?.data?.result?.engine === 'gemini'
+                  ? 'bg-cyan-100 text-cyan-800'
+                  : resultData?.data?.result?.engine === 'docling'
+                  ? 'bg-purple-100 text-purple-800'
+                  : 'bg-blue-100 text-blue-800'
+              }`}>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>
+                  {resultData?.data?.result?.engine === 'gemini'
+                    ? `Google ${resultData?.data?.result?.model_name || 'Gemini 2.5 AI'} Output`
+                    : resultData?.data?.result?.engine === 'docling'
+                    ? 'Docling AI Output'
+                    : 'PaddleOCR + VietOCR Output'}
+                </span>
               </span>
               <span className="text-slate-500 font-medium">
                 {viewMode === 'all_json' 
