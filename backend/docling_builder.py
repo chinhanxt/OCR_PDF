@@ -30,6 +30,72 @@ class DoclingBuilder:
         if pages_dir and not os.path.exists(pages_dir):
             os.makedirs(pages_dir, exist_ok=True)
 
+        # Notify initial status
+        if progress_callback:
+            progress_callback(1, total_pages)
+
+        # ⚡ FAST ONE-PASS CONVERSION FOR THE ENTIRE DOCUMENT
+        print(f"⚡ Running Docling Fast One-Pass Conversion for all {total_pages} pages...")
+        conv_res = self.converter.convert(input_pdf_path)
+        docling_doc = conv_res.document
+
+        # Group extracted texts and tables by page number
+        page_items_by_page = {p: [] for p in range(1, total_pages + 1)}
+
+        # 1. Extract Paragraph Texts
+        if hasattr(docling_doc, 'texts') and docling_doc.texts:
+            for item in docling_doc.texts:
+                if not item.text or not item.text.strip():
+                    continue
+                
+                page_no = 1
+                bbox_coords = [30, 30, 250, 50]
+                if hasattr(item, 'prov') and item.prov:
+                    for p in item.prov:
+                        if hasattr(p, 'page_no') and p.page_no:
+                            page_no = p.page_no
+                        if hasattr(p, 'bbox') and p.bbox:
+                            b = p.bbox
+                            bbox_coords = [b.l, b.t, b.r, b.b]
+
+                if page_no in page_items_by_page:
+                    page_items_by_page[page_no].append({
+                        "type": "text",
+                        "text": item.text.strip(),
+                        "bbox": bbox_coords,
+                        "confidence": 0.96
+                    })
+
+        # 2. Extract Structured Table Cells (TableFormer)
+        if hasattr(docling_doc, 'tables') and docling_doc.tables:
+            for t_idx, table in enumerate(docling_doc.tables):
+                if hasattr(table, 'data') and hasattr(table.data, 'table_cells'):
+                    for cell in table.data.table_cells:
+                        cell_text = cell.text.strip() if cell.text else ""
+                        if not cell_text:
+                            continue
+                        
+                        page_no = 1
+                        bbox_coords = [40, 40, 200, 60]
+                        if hasattr(cell, 'prov') and cell.prov:
+                            for p in cell.prov:
+                                if hasattr(p, 'page_no') and p.page_no:
+                                    page_no = p.page_no
+                                if hasattr(p, 'bbox') and p.bbox:
+                                    b = p.bbox
+                                    bbox_coords = [b.l, b.t, b.r, b.b]
+
+                        if page_no in page_items_by_page:
+                            page_items_by_page[page_no].append({
+                                "type": "table_cell",
+                                "row": cell.start_row_offset_idx,
+                                "col": cell.start_col_offset_idx,
+                                "text": cell_text,
+                                "bbox": bbox_coords,
+                                "confidence": 0.98
+                            })
+
+        # 3. Assemble pages metadata and searchable PDF layers
         for page_idx in range(total_pages):
             page_no = page_idx + 1
             if progress_callback:
@@ -47,57 +113,7 @@ class DoclingBuilder:
             scale_x = rect.width / pix.width
             scale_y = rect.height / pix.height
 
-            # Run Docling conversion for this specific page range (page_no, page_no)
-            page_items = []
-            try:
-                conv_res = self.converter.convert(input_pdf_path, page_range=(page_no, page_no))
-                docling_doc = conv_res.document
-                
-                # 1. Extract Paragraph Texts
-                if hasattr(docling_doc, 'texts') and docling_doc.texts:
-                    for item in docling_doc.texts:
-                        if not item.text or not item.text.strip():
-                            continue
-                        bbox_coords = [30, 30, 250, 50]
-                        if hasattr(item, 'prov') and item.prov:
-                            for p in item.prov:
-                                if hasattr(p, 'bbox') and p.bbox:
-                                    b = p.bbox
-                                    bbox_coords = [b.l, b.t, b.r, b.b]
-                        page_items.append({
-                            "type": "text",
-                            "text": item.text.strip(),
-                            "bbox": bbox_coords,
-                            "confidence": 0.96
-                        })
-
-                # 2. Extract Structured Table Cells (TableFormer)
-                if hasattr(docling_doc, 'tables') and docling_doc.tables:
-                    for t_idx, table in enumerate(docling_doc.tables):
-                        if hasattr(table, 'data') and hasattr(table.data, 'table_cells'):
-                            for cell in table.data.table_cells:
-                                cell_text = cell.text.strip() if cell.text else ""
-                                if not cell_text:
-                                    continue
-                                
-                                bbox_coords = [40, 40, 200, 60]
-                                if hasattr(cell, 'prov') and cell.prov:
-                                    for p in cell.prov:
-                                        if hasattr(p, 'bbox') and p.bbox:
-                                            b = p.bbox
-                                            bbox_coords = [b.l, b.t, b.r, b.b]
-                                
-                                page_items.append({
-                                    "type": "table_cell",
-                                    "row": cell.start_row_offset_idx,
-                                    "col": cell.start_col_offset_idx,
-                                    "text": cell_text,
-                                    "bbox": bbox_coords,
-                                    "confidence": 0.98
-                                })
-
-            except Exception as e:
-                print(f"Docling page {page_no} extraction note: {e}")
+            page_items = page_items_by_page.get(page_no, [])
 
             for item in page_items:
                 x0, y0, x1, y1 = item["bbox"]
