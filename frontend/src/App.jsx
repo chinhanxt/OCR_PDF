@@ -3,10 +3,11 @@ import Header from './components/Header';
 import DualViewer from './components/DualViewer';
 import LayoutEditor from './components/LayoutEditor';
 import { checkStatus, startPDFScan, getTaskStatus } from './api';
-import { Loader2, Clock, Cpu, Sparkles } from 'lucide-react';
+import { Loader2, Clock, Cpu, Sparkles, Layers } from 'lucide-react';
 
 export default function App() {
   const [gpuStatus, setGpuStatus] = useState(null);
+  const [selectedEngine, setSelectedEngine] = useState('paddleocr'); // 'paddleocr' | 'docling'
   const [isScanning, setIsScanning] = useState(false);
   const [taskProgress, setTaskProgress] = useState(null);
   const [resultData, setResultData] = useState(null);
@@ -36,10 +37,10 @@ export default function App() {
 
     setIsScanning(true);
     setResultData(null);
-    setTaskProgress({ status: 'processing', current_page: 0, total_pages: 1, progress_percent: 0 });
+    setTaskProgress({ status: 'processing', current_page: 0, total_pages: 1, progress_percent: 0, engine: selectedEngine });
 
     try {
-      const scanRes = await startPDFScan(file);
+      const scanRes = await startPDFScan(file, selectedEngine);
       const taskId = scanRes.task_id;
 
       const pollInterval = setInterval(async () => {
@@ -54,7 +55,7 @@ export default function App() {
           } else if (statusRes.status === 'failed') {
             clearInterval(pollInterval);
             setIsScanning(false);
-            alert("Lỗi khi scan PDF: " + (statusRes.error || "Unknown error"));
+            alert(`Lỗi khi scan PDF (${selectedEngine}): ` + (statusRes.error || "Unknown error"));
           }
         } catch (err) {
           console.error("Polling error:", err);
@@ -80,6 +81,8 @@ export default function App() {
         isScanning={isScanning}
         gpuStatus={gpuStatus}
         resultData={resultData}
+        selectedEngine={selectedEngine}
+        setSelectedEngine={setSelectedEngine}
       />
 
       {/* Tab Navigation (Light Theme) */}
@@ -98,26 +101,34 @@ export default function App() {
             activeTab === 'layout' ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          Interactive Layout & Dữ liệu JSON OCR
+          Interactive Layout & Dữ liệu JSON OCR ({selectedEngine === 'docling' ? 'Docling AI' : 'PaddleOCR'})
         </button>
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col relative">
-        {/* Real-Time Processing Progress Modal (Light Theme) */}
+        {/* Real-Time Processing Progress Modal */}
         {isScanning && (
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-6">
             <div className="bg-white border border-slate-200 rounded-2xl p-8 max-w-md w-full shadow-2xl flex flex-col items-center text-center">
               <div className="relative mb-6">
-                <div className="w-20 h-20 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-center animate-pulse">
-                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                <div className={`w-20 h-20 border rounded-2xl flex items-center justify-center animate-pulse ${
+                  selectedEngine === 'docling' ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
+                }`}>
+                  <Loader2 className={`w-10 h-10 animate-spin ${
+                    selectedEngine === 'docling' ? 'text-purple-600' : 'text-blue-600'
+                  }`} />
                 </div>
                 <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white p-1.5 rounded-lg shadow">
-                  <Sparkles className="w-4 h-4" />
+                  {selectedEngine === 'docling' ? <Layers className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
                 </div>
               </div>
 
-              <h3 className="text-xl font-bold text-slate-900 mb-1">Đang Scan & Nhận diện PDF</h3>
-              <p className="text-xs text-slate-500 mb-6 font-medium">Mô hình PaddleOCR GPU Gia tốc Tiếng Việt</p>
+              <h3 className="text-xl font-bold text-slate-900 mb-1">
+                Đang Scan PDF bằng Engine {selectedEngine === 'docling' ? 'Docling AI (IBM)' : 'PaddleOCR GPU'}
+              </h3>
+              <p className="text-xs text-slate-500 mb-6 font-medium">
+                {selectedEngine === 'docling' ? 'Phân tích cấu trúc bảng TableFormer của IBM Research' : 'Nhận diện chuỗi Tiếng Việt gia tốc GPU CUDA'}
+              </p>
 
               {/* Progress Bar & Percentage */}
               <div className="w-full mb-6">
@@ -125,13 +136,19 @@ export default function App() {
                   <span className="text-slate-700 font-bold">
                     Trang {taskProgress?.current_page || 0} / {taskProgress?.total_pages || 1}
                   </span>
-                  <span className="text-blue-700 font-mono font-bold text-sm">
+                  <span className={`font-mono font-bold text-sm ${
+                    selectedEngine === 'docling' ? 'text-purple-700' : 'text-blue-700'
+                  }`}>
                     {taskProgress?.progress_percent || 0}%
                   </span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-3 p-0.5 border border-slate-200">
                   <div
-                    className="bg-gradient-to-r from-blue-600 to-emerald-500 h-full rounded-full transition-all duration-300 shadow-xs"
+                    className={`h-full rounded-full transition-all duration-300 shadow-xs ${
+                      selectedEngine === 'docling'
+                        ? 'bg-gradient-to-r from-purple-600 to-pink-500'
+                        : 'bg-gradient-to-r from-blue-600 to-emerald-500'
+                    }`}
                     style={{ width: `${taskProgress?.progress_percent || 0}%` }}
                   />
                 </div>
@@ -150,17 +167,18 @@ export default function App() {
                 <div className="h-8 w-px bg-slate-200" />
 
                 <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Gia tốc Phần cứng</span>
-                  <div className="flex items-center space-x-1.5 mt-1 text-emerald-700">
-                    <Cpu className="w-4 h-4" />
-                    <span className="text-xs font-bold font-mono">RTX 3050</span>
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Mô hình Engine</span>
+                  <div className="flex items-center space-x-1.5 mt-1 text-slate-800">
+                    <span className="text-xs font-bold font-mono">
+                      {selectedEngine === 'docling' ? 'Docling TableFormer' : 'PaddleOCR GPU'}
+                    </span>
                   </div>
                 </div>
               </div>
 
               <div className="w-full bg-slate-50 rounded-lg p-3 text-xs text-slate-600 flex items-center justify-center space-x-2 border border-slate-200">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                <span className="font-medium">Đang xử lý trang {taskProgress?.current_page || 0} trên GPU...</span>
+                <span className="font-medium">Đang xử lý trang {taskProgress?.current_page || 0} trên {selectedEngine.toUpperCase()}...</span>
               </div>
             </div>
           </div>
