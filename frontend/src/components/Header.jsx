@@ -23,15 +23,30 @@ export default function Header({ onUpload, isScanning, gpuStatus, resultData, se
     return `${m}:${s}`;
   };
 
-  // Determine docx URL with safe fallback
+  // Safe data extractor supporting both resultData and resultData.data
+  const getData = () => {
+    if (!resultData) return null;
+    return resultData.data || resultData;
+  };
+
+  // Determine exact docx URL
   const getDocxUrl = () => {
-    if (!resultData) return '';
-    if (resultData.docx_url) return `http://localhost:8000${resultData.docx_url}`;
-    if (resultData.searchable_url) {
-      const fallback = resultData.searchable_url.replace('_searchable.pdf', '_result.docx').replace('.pdf', '.docx');
+    const data = getData();
+    if (!data) return '#';
+    if (data.docx_url) return `http://localhost:8000${data.docx_url}`;
+    if (data.searchable_url) {
+      const fallback = data.searchable_url.replace('_searchable.pdf', '_result.docx').replace('.pdf', '.docx');
       return `http://localhost:8000${fallback}`;
     }
-    return '';
+    return '#';
+  };
+
+  // Determine exact pdf URL
+  const getPdfUrl = () => {
+    const data = getData();
+    if (!data) return '#';
+    if (data.searchable_url) return `http://localhost:8000${data.searchable_url}`;
+    return '#';
   };
 
   return (
@@ -115,17 +130,17 @@ export default function Header({ onUpload, isScanning, gpuStatus, resultData, se
           <div className="flex items-center space-x-2">
             <a
               href={getDocxUrl()}
-              download
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg flex items-center space-x-2 text-sm shadow-md transition"
+              download="scan_result.docx"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg flex items-center space-x-2 text-sm shadow-md transition cursor-pointer"
             >
               <FileText className="w-4 h-4 text-blue-100" />
               <span>📝 Tải File Word (.docx)</span>
             </a>
 
             <a
-              href={`http://localhost:8000${resultData.searchable_url}`}
-              download
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-lg flex items-center space-x-1 text-xs border border-slate-300 transition"
+              href={getPdfUrl()}
+              download="scan_result.pdf"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-lg flex items-center space-x-1 text-xs border border-slate-300 transition cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Tải PDF Searchable</span>
