@@ -1,213 +1,258 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Search, Download, Edit3, CheckCircle2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ChevronLeft, ChevronRight, Search, Download, Copy, Check, Code, FileText, Layers, Sparkles } from 'lucide-react';
 
 export default function LayoutEditor({ resultData }) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [hoveredBox, setHoveredBox] = useState(null);
-  const [selectedBox, setSelectedBox] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [editedItems, setEditedItems] = useState({});
+  const [viewMode, setViewMode] = useState('json'); // 'json' | 'text' | 'all_json'
+  const [copied, setCopied] = useState(false);
 
-  if (!resultData || !resultData.data?.result) return null;
+  if (!resultData || !resultData.data?.result) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 text-slate-400 p-8">
+        <FileText className="w-16 h-16 text-slate-300 mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-slate-700">Chưa có dữ liệu OCR PDF</h3>
+        <p className="text-sm text-slate-500 mt-1">Vui lòng upload file PDF để xem chi tiết dữ liệu JSON và văn bản trích xuất.</p>
+      </div>
+    );
+  }
 
-  const pages = resultData.data.result.pages;
+  const pages = resultData.data.result.pages || [];
   const totalPages = pages.length;
   const activePage = pages[currentPage - 1] || pages[0];
 
-  const items = activePage.ocr_items || [];
-  const filteredItems = items.filter(item =>
-    item.text.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filtered page OCR items based on search query
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return activePage.ocr_items || [];
+    const q = searchQuery.toLowerCase();
+    return (activePage.ocr_items || []).filter(item =>
+      item.text.toLowerCase().includes(q) || item.id.toLowerCase().includes(q)
+    );
+  }, [activePage, searchQuery]);
 
-  const handleTextChange = (id, newText) => {
-    setEditedItems(prev => ({ ...prev, [id]: newText }));
+  // Construct JSON object for display
+  const jsonPayload = useMemo(() => {
+    if (viewMode === 'all_json') {
+      return {
+        document_total_pages: totalPages,
+        pages: pages.map(p => ({
+          page_number: p.page_number,
+          total_items: p.ocr_items.length,
+          width: p.width,
+          height: p.height,
+          ocr_items: p.ocr_items.map(it => ({
+            id: it.id,
+            text: it.text,
+            confidence: Number((it.confidence * 100).toFixed(1)),
+            bbox: it.bbox.map(n => Number(n.toFixed(1)))
+          }))
+        }))
+      };
+    }
+
+    return {
+      page_number: activePage.page_number,
+      total_pages: totalPages,
+      width: activePage.width,
+      height: activePage.height,
+      total_items: filteredItems.length,
+      ocr_items: filteredItems.map(it => ({
+        id: it.id,
+        text: it.text,
+        confidence: Number((it.confidence * 100).toFixed(1)),
+        bbox: it.bbox.map(n => Number(n.toFixed(1)))
+      }))
+    };
+  }, [activePage, pages, totalPages, viewMode, filteredItems]);
+
+  const jsonString = JSON.stringify(jsonPayload, null, 2);
+
+  const handleCopyJSON = () => {
+    navigator.clipboard.writeText(jsonString);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const getItemText = (item) => {
-    return editedItems[item.id] !== undefined ? editedItems[item.id] : item.text;
-  };
-
-  const exportPageDataJSON = () => {
-    const dataToExport = items.map(item => ({
-      id: item.id,
-      text: getItemText(item),
-      confidence: item.confidence,
-      bbox: item.bbox
-    }));
-    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+  const handleDownloadJSON = () => {
+    const filename = viewMode === 'all_json' 
+      ? 'full_pdf_extracted_ocr.json' 
+      : `page_${currentPage}_extracted_ocr.json`;
+    const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `page_${currentPage}_extracted_data.json`;
+    a.download = filename;
     a.click();
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden">
-      {/* Top Header Controls for Interactive Layout */}
-      <div className="bg-slate-900 border-b border-slate-800 px-6 py-2.5 flex items-center justify-between shrink-0">
+    <div className="flex-1 flex flex-col h-full bg-slate-100 text-slate-800 overflow-hidden font-sans">
+      {/* Light Theme Control Header */}
+      <div className="bg-white border-b border-slate-200 px-6 py-3 flex flex-wrap items-center justify-between shadow-sm shrink-0 gap-4">
+        {/* Left Side: Page Selector & Search */}
         <div className="flex items-center space-x-4">
-          <div className="flex items-center bg-slate-800 rounded-lg p-1 border border-slate-700">
+          <div className="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-300">
             <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1.5 hover:bg-slate-700 rounded text-slate-300 hover:text-white disabled:opacity-40 transition"
+              onClick={() => {
+                setViewMode('json');
+                setCurrentPage(p => Math.max(1, p - 1));
+              }}
+              disabled={currentPage === 1 || viewMode === 'all_json'}
+              className="p-1.5 hover:bg-white rounded text-slate-600 hover:text-slate-900 disabled:opacity-40 transition shadow-sm"
+              title="Trang trước"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <span className="px-3 font-semibold text-sm text-blue-400">Trang {currentPage} / {totalPages}</span>
+            <span className="px-3 font-bold text-sm text-slate-800 font-mono">
+              {viewMode === 'all_json' ? `Tất cả ${totalPages} trang` : `Trang ${currentPage} / ${totalPages}`}
+            </span>
             <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1.5 hover:bg-slate-700 rounded text-slate-300 hover:text-white disabled:opacity-40 transition"
+              onClick={() => {
+                setViewMode('json');
+                setCurrentPage(p => Math.min(totalPages, p + 1));
+              }}
+              disabled={currentPage === totalPages || viewMode === 'all_json'}
+              className="p-1.5 hover:bg-white rounded text-slate-600 hover:text-slate-900 disabled:opacity-40 transition shadow-sm"
+              title="Trang sau"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
 
+          {/* Search Box */}
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Tìm kiếm từ / số liệu..."
+              placeholder="Tìm kiếm từ / số liệu trong JSON..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 w-64"
+              className="bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white w-64 transition"
             />
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <span className="text-xs text-slate-400 font-medium">Tổng số khối: <strong className="text-blue-400">{items.length}</strong></span>
+        {/* Middle: View Mode Tabs */}
+        <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-300">
           <button
-            onClick={exportPageDataJSON}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 flex items-center space-x-1.5 transition"
+            onClick={() => setViewMode('json')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md flex items-center space-x-1.5 transition ${
+              viewMode === 'json' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Code className="w-3.5 h-3.5" />
+            <span>JSON Trang {currentPage}</span>
+          </button>
+
+          <button
+            onClick={() => setViewMode('text')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md flex items-center space-x-1.5 transition ${
+              viewMode === 'text' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Văn bản Dòng</span>
+          </button>
+
+          <button
+            onClick={() => setViewMode('all_json')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md flex items-center space-x-1.5 transition ${
+              viewMode === 'all_json' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>JSON Toàn bộ PDF</span>
+          </button>
+        </div>
+
+        {/* Right Side: Copy & Download Actions */}
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleCopyJSON}
+            className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 flex items-center space-x-1.5 shadow-sm transition"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+            <span className={copied ? "text-emerald-600 font-bold" : ""}>{copied ? "Đã chép!" : "Copy JSON"}</span>
+          </button>
+
+          <button
+            onClick={handleDownloadJSON}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 shadow transition"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Xuất JSON Trang {currentPage}</span>
+            <span>Tải file JSON</span>
           </button>
         </div>
       </div>
 
-      {/* Main Layout Area */}
-      <div className="flex-1 flex gap-4 p-4 overflow-hidden">
-        {/* Left Side: Clean Document Canvas (No PDF Background, Exact Field Boxes) */}
-        <div className="flex-1 bg-slate-900 rounded-xl p-4 overflow-auto border border-slate-800 flex justify-center items-start shadow-inner">
-          <div
-            className="relative bg-white rounded shadow-2xl border border-slate-300 transition-all my-auto"
-            style={{
-              width: `${activePage.width * 1.25}px`,
-              height: `${activePage.height * 1.25}px`,
-            }}
-          >
-            {/* Grid Lines Pattern for Document Alignment */}
-            <div
-              className="absolute inset-0 pointer-events-none opacity-5"
-              style={{
-                backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)',
-                backgroundSize: '20px 20px'
-              }}
-            />
+      {/* Main Content Area (Light Theme White Paper Canvas) */}
+      <div className="flex-1 p-6 overflow-auto flex justify-center">
+        <div className="w-full max-w-5xl bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col font-mono text-xs">
+          {/* Header Metadata Info Bar */}
+          <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 font-sans text-xs">
+            <div className="flex items-center space-x-2">
+              <span className="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full font-bold flex items-center space-x-1">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                <span>PaddleOCR + VietOCR Output</span>
+              </span>
+              <span className="text-slate-500 font-medium">
+                {viewMode === 'all_json' 
+                  ? `Toàn bộ ${totalPages} trang (${pages.reduce((acc, p) => acc + p.ocr_items.length, 0)} khối chữ)` 
+                  : `Trang ${currentPage} (${filteredItems.length} khối chữ được trích xuất)`}
+              </span>
+            </div>
 
-            {/* Structured Input Fields matching Exact Bounding Boxes */}
-            {items.map((item) => {
-              const [x0, y0, x1, y1] = item.bbox;
-              const leftPct = (x0 / activePage.width) * 100;
-              const topPct = (y0 / activePage.height) * 100;
-              const widthPct = ((x1 - x0) / activePage.width) * 100;
-              const heightPct = ((y1 - y0) / activePage.height) * 100;
-
-              const isHovered = hoveredBox === item.id;
-              const isSelected = selectedBox?.id === item.id;
-              const currentText = getItemText(item);
-
-              return (
-                <div
-                  key={item.id}
-                  onMouseEnter={() => setHoveredBox(item.id)}
-                  onMouseLeave={() => setHoveredBox(null)}
-                  onClick={() => setSelectedBox(item)}
-                  style={{
-                    position: 'absolute',
-                    left: `${leftPct}%`,
-                    top: `${topPct}%`,
-                    width: `${widthPct}%`,
-                    height: `${heightPct}%`,
-                  }}
-                  className={`group border transition rounded-sm p-0.5 flex items-center justify-between ${
-                    isSelected
-                      ? 'border-blue-600 bg-blue-50 text-blue-900 z-30 ring-2 ring-blue-500/50'
-                      : isHovered
-                      ? 'border-amber-500 bg-amber-50 text-slate-900 z-20 shadow'
-                      : 'border-slate-300 bg-slate-50/90 text-slate-800 hover:border-slate-400'
-                  }`}
-                >
-                  <input
-                    type="text"
-                    value={currentText}
-                    onChange={(e) => handleTextChange(item.id, e.target.value)}
-                    className="w-full bg-transparent border-none focus:outline-none text-[11px] font-sans text-slate-900 leading-tight px-1 font-medium truncate"
-                    title={`Box ID: ${item.id} (${(item.confidence * 100).toFixed(1)}%)`}
-                  />
-                  <span className="opacity-0 group-hover:opacity-100 text-[8px] font-mono text-slate-400 shrink-0 px-0.5">
-                    {(item.confidence * 100).toFixed(0)}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right Side: Structured Data & Field List */}
-        <div className="w-96 bg-slate-900 rounded-xl border border-slate-800 flex flex-col overflow-hidden shadow-lg">
-          <div className="p-4 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
-            <h3 className="font-bold text-sm text-slate-200 flex items-center space-x-2">
-              <Edit3 className="w-4 h-4 text-blue-400" />
-              <span>Danh sách Trường dữ liệu</span>
-            </h3>
-            <span className="text-xs font-mono text-blue-400 font-bold">Trang {currentPage}</span>
+            <span className="text-slate-400 font-mono">Structure: Validated JSON Array</span>
           </div>
 
-          <div className="flex-1 overflow-auto p-3 space-y-2">
-            {filteredItems.map((item) => {
-              const isHovered = hoveredBox === item.id;
-              const isSelected = selectedBox?.id === item.id;
-              const currentText = getItemText(item);
-
-              return (
+          {/* View Modes Rendering */}
+          {viewMode === 'text' ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 overflow-auto text-slate-900 leading-relaxed font-sans text-sm space-y-2">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-400 font-mono mb-4">
+                Dòng văn bản trích xuất thực tế (Page {currentPage}):
+              </h4>
+              {filteredItems.map((item, idx) => (
                 <div
                   key={item.id}
-                  onMouseEnter={() => setHoveredBox(item.id)}
-                  onMouseLeave={() => setHoveredBox(null)}
-                  onClick={() => setSelectedBox(item)}
-                  className={`p-3 rounded-lg border text-xs transition cursor-pointer ${
-                    isSelected
-                      ? 'bg-blue-950 border-blue-500 shadow-md ring-1 ring-blue-500'
-                      : isHovered
-                      ? 'bg-slate-800 border-slate-600'
-                      : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
-                  }`}
+                  className="flex items-center justify-between p-2 rounded hover:bg-white hover:shadow-sm transition border border-transparent hover:border-slate-200"
                 >
-                  <div className="flex justify-between items-center text-[10px] text-slate-400 mb-1 font-mono">
-                    <span className="text-slate-400 font-semibold">{item.id}</span>
-                    <div className="flex items-center space-x-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                      <span className="text-emerald-400 font-bold">{(item.confidence * 100).toFixed(1)}%</span>
-                    </div>
+                  <span className="font-medium text-slate-900">{item.text}</span>
+                  <div className="flex items-center space-x-3 font-mono text-xs shrink-0 ml-4">
+                    <span className="text-slate-400 text-[11px]">{item.id}</span>
+                    <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
+                      item.confidence >= 0.95 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {(item.confidence * 100).toFixed(1)}%
+                    </span>
                   </div>
-                  <input
-                    type="text"
-                    value={currentText}
-                    onChange={(e) => handleTextChange(item.id, e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 font-medium focus:outline-none focus:border-blue-500 text-xs"
-                  />
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            /* Syntax-highlighted Clean White JSON Viewer */
+            <pre className="bg-slate-50 border border-slate-200 rounded-lg p-6 overflow-auto text-slate-800 leading-normal font-mono text-xs shadow-inner">
+              <code>
+                {jsonString.split('\n').map((line, i) => {
+                  let lineClass = "text-slate-800";
+                  if (line.includes('"text":')) lineClass = "text-emerald-700 font-bold";
+                  else if (line.includes('"confidence":')) lineClass = "text-amber-700 font-semibold";
+                  else if (line.includes('"bbox":') || line.includes('"id":')) lineClass = "text-blue-700";
+                  else if (line.includes('"page_number":')) lineClass = "text-purple-700 font-bold";
+
+                  return (
+                    <div key={i} className="hover:bg-slate-200/50 px-1 rounded transition">
+                      <span className="select-none text-slate-300 w-8 inline-block text-right mr-4 font-mono text-[10px]">
+                        {i + 1}
+                      </span>
+                      <span className={lineClass}>{line}</span>
+                    </div>
+                  );
+                })}
+              </code>
+            </pre>
+          )}
         </div>
       </div>
     </div>
   );
 }
-
