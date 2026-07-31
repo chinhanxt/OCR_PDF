@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, Upload, FileText, Download, Clock, Loader2, Sparkles, Layers, FileSpreadsheet } from 'lucide-react';
+import { Cpu, Upload, FileText, Download, Clock, Loader2, Sparkles, Layers } from 'lucide-react';
 
 export default function Header({ onUpload, isScanning, gpuStatus, resultData, selectedEngine, setSelectedEngine }) {
   const [seconds, setSeconds] = useState(0);
@@ -21,6 +21,17 @@ export default function Header({ onUpload, isScanning, gpuStatus, resultData, se
     const m = Math.floor(sec / 60).toString().padStart(2, '0');
     const s = (sec % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
+  };
+
+  // Determine docx URL with safe fallback
+  const getDocxUrl = () => {
+    if (!resultData) return '';
+    if (resultData.docx_url) return `http://localhost:8000${resultData.docx_url}`;
+    if (resultData.searchable_url) {
+      const fallback = resultData.searchable_url.replace('_searchable.pdf', '_result.docx').replace('.pdf', '.docx');
+      return `http://localhost:8000${fallback}`;
+    }
+    return '';
   };
 
   return (
@@ -99,27 +110,25 @@ export default function Header({ onUpload, isScanning, gpuStatus, resultData, se
           <input type="file" accept=".pdf" onChange={onUpload} disabled={isScanning} className="hidden" />
         </label>
 
-        {/* Download Word .docx & PDF Action Buttons */}
+        {/* Download Action Buttons */}
         {resultData && !isScanning && (
           <div className="flex items-center space-x-2">
-            {resultData.docx_url && (
-              <a
-                href={`http://localhost:8000${resultData.docx_url}`}
-                download
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg flex items-center space-x-2 text-sm shadow transition animate-bounce"
-              >
-                <FileText className="w-4 h-4 text-blue-100" />
-                <span>📝 Tải File Word (.docx)</span>
-              </a>
-            )}
+            <a
+              href={getDocxUrl()}
+              download
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg flex items-center space-x-2 text-sm shadow-md transition"
+            >
+              <FileText className="w-4 h-4 text-blue-100" />
+              <span>📝 Tải File Word (.docx)</span>
+            </a>
 
             <a
               href={`http://localhost:8000${resultData.searchable_url}`}
               download
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-3 py-2 rounded-lg flex items-center space-x-1.5 text-sm shadow-sm transition"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-lg flex items-center space-x-1 text-xs border border-slate-300 transition"
             >
-              <Download className="w-4 h-4" />
-              <span>Tải PDF</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>Tải PDF Searchable</span>
             </a>
           </div>
         )}
