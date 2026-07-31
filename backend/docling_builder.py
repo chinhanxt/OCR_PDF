@@ -6,9 +6,9 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 
 class DoclingBuilder:
     def __init__(self):
-        print("⚡ Initializing Docling Engine with GPU CUDA acceleration...")
+        print("⚡ Initializing Docling Engine...")
         pipeline_options = PdfPipelineOptions()
-        pipeline_options.accelerator_options = AcceleratorOptions(num_threads=8, device=AcceleratorDevice.CUDA)
+        pipeline_options.accelerator_options = AcceleratorOptions(num_threads=8, device=AcceleratorDevice.AUTO)
         pipeline_options.do_ocr = True
         pipeline_options.do_table_structure = True
         self.converter = DocumentConverter(format_options={'pdf': PdfFormatOption(pipeline_options=pipeline_options)})
@@ -50,20 +50,50 @@ class DoclingBuilder:
             try:
                 conv_res = self.converter.convert(input_pdf_path, page_range=(page_no, page_no))
                 docling_doc = conv_res.document
+                
+                # 1. Extract Paragraph Texts
                 if hasattr(docling_doc, 'texts') and docling_doc.texts:
                     for item in docling_doc.texts:
-                        bbox_coords = [20, 20, 200, 40]
+                        if not item.text or not item.text.strip():
+                            continue
+                        bbox_coords = [30, 30, 250, 50]
                         if hasattr(item, 'prov') and item.prov:
                             for p in item.prov:
                                 if hasattr(p, 'bbox') and p.bbox:
                                     b = p.bbox
                                     bbox_coords = [b.l, b.t, b.r, b.b]
-                        
                         page_items.append({
-                            "text": item.text,
+                            "type": "text",
+                            "text": item.text.strip(),
                             "bbox": bbox_coords,
-                            "confidence": 0.95
+                            "confidence": 0.96
                         })
+
+                # 2. Extract Structured Table Cells (TableFormer)
+                if hasattr(docling_doc, 'tables') and docling_doc.tables:
+                    for t_idx, table in enumerate(docling_doc.tables):
+                        if hasattr(table, 'data') and hasattr(table.data, 'table_cells'):
+                            for cell in table.data.table_cells:
+                                cell_text = cell.text.strip() if cell.text else ""
+                                if not cell_text:
+                                    continue
+                                
+                                bbox_coords = [40, 40, 200, 60]
+                                if hasattr(cell, 'prov') and cell.prov:
+                                    for p in cell.prov:
+                                        if hasattr(p, 'bbox') and p.bbox:
+                                            b = p.bbox
+                                            bbox_coords = [b.l, b.t, b.r, b.b]
+                                
+                                page_items.append({
+                                    "type": "table_cell",
+                                    "row": cell.start_row_offset_idx,
+                                    "col": cell.start_col_offset_idx,
+                                    "text": cell_text,
+                                    "bbox": bbox_coords,
+                                    "confidence": 0.98
+                                })
+
             except Exception as e:
                 print(f"Docling page {page_no} extraction note: {e}")
 
@@ -86,6 +116,9 @@ class DoclingBuilder:
                 "ocr_items": [
                     {
                         "id": f"docling_p{page_no}_{i}",
+                        "type": item.get("type", "text"),
+                        "row": item.get("row"),
+                        "col": item.get("col"),
                         "bbox": [item["bbox"][0]*scale_x, item["bbox"][1]*scale_y, item["bbox"][2]*scale_x, item["bbox"][3]*scale_y],
                         "text": item["text"],
                         "confidence": item["confidence"]
