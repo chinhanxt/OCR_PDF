@@ -2,10 +2,12 @@ import fitz  # PyMuPDF
 import os
 from typing import List, Dict, Any, Callable
 from ocr_engine import OCREngine
+from docx_builder import DOCXBuilder
 
 class PDFBuilder:
     def __init__(self):
         self.ocr_engine = OCREngine(use_gpu=True)
+        self.docx_builder = DOCXBuilder()
 
     def process_pdf(
         self,
@@ -70,11 +72,17 @@ class PDFBuilder:
         out_doc.close()
         doc.close()
 
+        # Build Word .docx file
+        output_docx_path = output_pdf_path.replace("_searchable.pdf", "_result.docx").replace(".pdf", ".docx")
+        self.docx_builder.build_docx_for_paddle(pages_metadata, output_docx_path)
+
         if progress_callback:
             progress_callback(total_pages, total_pages)
 
         return {
+            "engine": "paddleocr",
             "total_pages": len(pages_metadata),
             "output_pdf": output_pdf_path,
+            "output_docx": output_docx_path,
             "pages": pages_metadata
         }

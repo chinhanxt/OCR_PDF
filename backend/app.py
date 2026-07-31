@@ -56,6 +56,7 @@ def run_pdf_job(task_id: str, upload_path: str, output_path: str, task_pages_dir
         else:
             result = pdf_builder.process_pdf(upload_path, output_path, task_pages_dir, progress_callback=on_progress)
 
+        docx_filename = os.path.basename(result["output_docx"])
         tasks_store[task_id] = {
             "status": "completed",
             "current_page": result["total_pages"],
@@ -64,7 +65,8 @@ def run_pdf_job(task_id: str, upload_path: str, output_path: str, task_pages_dir
             "engine": engine,
             "result": result,
             "original_url": f"/storage/uploads/{task_id}_{filename}",
-            "searchable_url": f"/storage/outputs/{task_id}_searchable.pdf"
+            "searchable_url": f"/storage/outputs/{task_id}_searchable.pdf",
+            "docx_url": f"/storage/outputs/{docx_filename}"
         }
     except Exception as e:
         tasks_store[task_id] = {"status": "failed", "error": str(e), "engine": engine}

@@ -3,6 +3,7 @@ import fitz  # PyMuPDF
 from typing import List, Dict, Any, Callable
 from docling.datamodel.pipeline_options import PdfPipelineOptions, AcceleratorOptions, AcceleratorDevice
 from docling.document_converter import DocumentConverter, PdfFormatOption
+from docx_builder import DOCXBuilder
 
 class DoclingBuilder:
     def __init__(self):
@@ -12,6 +13,7 @@ class DoclingBuilder:
         pipeline_options.do_ocr = True
         pipeline_options.do_table_structure = True
         self.converter = DocumentConverter(format_options={'pdf': PdfFormatOption(pipeline_options=pipeline_options)})
+        self.docx_builder = DOCXBuilder()
 
     def process_pdf(
         self,
@@ -131,6 +133,10 @@ class DoclingBuilder:
         out_doc.close()
         doc.close()
 
+        # Build Word .docx file
+        output_docx_path = output_pdf_path.replace("_searchable.pdf", "_docling_result.docx").replace(".pdf", ".docx")
+        self.docx_builder.build_docx_for_docling(pages_metadata, output_docx_path)
+
         if progress_callback:
             progress_callback(total_pages, total_pages)
 
@@ -138,5 +144,6 @@ class DoclingBuilder:
             "engine": "docling",
             "total_pages": len(pages_metadata),
             "output_pdf": output_pdf_path,
+            "output_docx": output_docx_path,
             "pages": pages_metadata
         }

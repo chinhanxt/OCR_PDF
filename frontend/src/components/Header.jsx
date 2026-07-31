@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, Upload, FileText, Download, Clock, Loader2, Sparkles, Layers } from 'lucide-react';
+import { Cpu, Upload, FileText, Download, Clock, Loader2, Sparkles, Layers, FileSpreadsheet } from 'lucide-react';
 
 export default function Header({ onUpload, isScanning, gpuStatus, resultData, selectedEngine, setSelectedEngine }) {
   const [seconds, setSeconds] = useState(0);
@@ -99,16 +99,29 @@ export default function Header({ onUpload, isScanning, gpuStatus, resultData, se
           <input type="file" accept=".pdf" onChange={onUpload} disabled={isScanning} className="hidden" />
         </label>
 
-        {/* Download Searchable PDF Action */}
+        {/* Download Word .docx & PDF Action Buttons */}
         {resultData && !isScanning && (
-          <a
-            href={`http://localhost:8000${resultData.searchable_url}`}
-            download
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-lg flex items-center space-x-2 text-sm shadow-sm transition"
-          >
-            <Download className="w-4 h-4" />
-            <span>Tải Searchable PDF</span>
-          </a>
+          <div className="flex items-center space-x-2">
+            {resultData.docx_url && (
+              <a
+                href={`http://localhost:8000${resultData.docx_url}`}
+                download
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg flex items-center space-x-2 text-sm shadow transition animate-bounce"
+              >
+                <FileText className="w-4 h-4 text-blue-100" />
+                <span>📝 Tải File Word (.docx)</span>
+              </a>
+            )}
+
+            <a
+              href={`http://localhost:8000${resultData.searchable_url}`}
+              download
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-3 py-2 rounded-lg flex items-center space-x-1.5 text-sm shadow-sm transition"
+            >
+              <Download className="w-4 h-4" />
+              <span>Tải PDF</span>
+            </a>
+          </div>
         )}
       </div>
     </header>
