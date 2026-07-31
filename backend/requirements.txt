@@ -1,0 +1,8 @@
+fastapi>=0.100.0
+uvicorn>=0.22.0
+pymupdf>=1.22.0
+paddleocr>=2.7.0
+paddlepaddle-gpu>=2.5.0
+pillow>=9.5.0
+python-multipart>=0.0.6
+pytest>=7.0.0
