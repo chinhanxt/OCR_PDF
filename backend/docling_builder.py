@@ -1,13 +1,14 @@
 import os
 import fitz  # PyMuPDF
+from PIL import Image
 from typing import List, Dict, Any, Callable
 from docling.datamodel.pipeline_options import PdfPipelineOptions, AcceleratorOptions, AcceleratorDevice
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docx_builder import DOCXBuilder
 
 class DoclingBuilder:
-    def __init__(self):
-        print("⚡ Initializing Docling Engine with Precision Bounding Box Origin...")
+    def __init__(self, use_vietocr: bool = True):
+        print("⚡ Initializing Docling Engine with VietOCR Diacritics Refinement...")
         pipeline_options = PdfPipelineOptions()
         pipeline_options.accelerator_options = AcceleratorOptions(
             num_threads=4,
@@ -17,6 +18,17 @@ class DoclingBuilder:
         pipeline_options.do_table_structure = True
         self.converter = DocumentConverter(format_options={'pdf': PdfFormatOption(pipeline_options=pipeline_options)})
         self.docx_builder = DOCXBuilder()
+        self.use_vietocr = use_vietocr
+        self.vietocr_engine = None
+
+    def get_vietocr(self):
+        if self.vietocr_engine is None and self.use_vietocr:
+            try:
+                from vietocr_engine import VietOCREngine
+                self.vietocr_engine = VietOCREngine()
+            except Exception as e:
+                print(f"Warning: VietOCR loading failed: {e}")
+        return self.vietocr_engine
 
     def process_pdf(
         self,
@@ -29,6 +41,7 @@ class DoclingBuilder:
         out_doc = fitz.open()
         total_pages = len(doc)
         pages_metadata = []
+        vietocr = self.get_vietocr()
 
         if pages_dir and not os.path.exists(pages_dir):
             os.makedirs(pages_dir, exist_ok=True)
@@ -43,7 +56,7 @@ class DoclingBuilder:
             if progress_callback:
                 progress_callback(page_no, total_pages)
 
-            print(f"⚡ Docling processing page {page_no} / {total_pages}...")
+            print(f"⚡ Docling + VietOCR processing page {page_no} / {total_pages}...")
             
             # Convert individual page
             conv_res = self.converter.convert(input_pdf_path, page_range=(page_no, page_no))
@@ -108,7 +121,7 @@ class DoclingBuilder:
                                     "confidence": 0.98
                                 })
 
-            # Render page image and searchable PDF layer
+            # Render page image
             pix = page.get_pixmap(dpi=300)
             page_img_path = os.path.join(pages_dir or "/tmp", f"page_{page_no}.png")
             pix.save(page_img_path)
@@ -119,6 +132,32 @@ class DoclingBuilder:
 
             scale_x = rect.width / pix.width
             scale_y = rect.height / pix.height
+
+            # ⚡ Refine extracted texts & cell values with VietOCR Transformer
+            if vietocr:
+                try:
+                    pil_img = Image.open(page_img_path)
+                    for item in page_items:
+                        x0, y0, x1, y1 = item["bbox"]
+                        # Scale back to 300 dpi image pixels
+                        px0 = int((x0 / scale_x))
+                        py0 = int((y0 / scale_y))
+                        px1 = int((x1 / scale_x))
+                        py1 = int((y1 / scale_y))
+                        pad = 4
+                        crop_box = (
+                            max(0, px0 - pad),
+                            max(0, py0 - pad),
+                            min(pil_img.width, px1 + pad),
+                            min(pil_img.height, py1 + pad)
+                        )
+                        if (crop_box[2] - crop_box[0]) > 10 and (crop_box[3] - crop_box[1]) > 8:
+                            crop_img = pil_img.crop(crop_box)
+                            v_text = vietocr.predict_crop(crop_img)
+                            if v_text:
+                                item["text"] = v_text
+                except Exception as e:
+                    print(f"VietOCR Refinement Error in Docling: {e}")
 
             for item in page_items:
                 x0, y0, x1, y1 = item["bbox"]
@@ -162,7 +201,7 @@ class DoclingBuilder:
             progress_callback(total_pages, total_pages)
 
         return {
-            "engine": "docling",
+            "engine": "docling_vietocr",
             "total_pages": len(pages_metadata),
             "output_pdf": output_pdf_path,
             "output_docx": output_docx_path,

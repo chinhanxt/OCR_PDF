@@ -1,13 +1,25 @@
 import fitz  # PyMuPDF
 import os
+from PIL import Image
 from typing import List, Dict, Any, Callable
 from ocr_engine import OCREngine
 from docx_builder import DOCXBuilder
 
 class PDFBuilder:
-    def __init__(self):
+    def __init__(self, use_vietocr: bool = True):
         self.ocr_engine = OCREngine(use_gpu=True)
         self.docx_builder = DOCXBuilder()
+        self.use_vietocr = use_vietocr
+        self.vietocr_engine = None
+
+    def get_vietocr(self):
+        if self.vietocr_engine is None and self.use_vietocr:
+            try:
+                from vietocr_engine import VietOCREngine
+                self.vietocr_engine = VietOCREngine()
+            except Exception as e:
+                print(f"Warning: VietOCR loading failed: {e}")
+        return self.vietocr_engine
 
     def process_pdf(
         self,
@@ -20,6 +32,7 @@ class PDFBuilder:
         out_doc = fitz.open()
         pages_metadata = []
         total_pages = len(doc)
+        vietocr = self.get_vietocr()
 
         if pages_dir and not os.path.exists(pages_dir):
             os.makedirs(pages_dir, exist_ok=True)
@@ -34,6 +47,27 @@ class PDFBuilder:
             pix.save(page_img_path)
 
             ocr_results = self.ocr_engine.scan_image(page_img_path)
+
+            # Refine texts using VietOCR Transformer
+            if vietocr:
+                try:
+                    pil_img = Image.open(page_img_path)
+                    for item in ocr_results:
+                        x0, y0, x1, y1 = item["bbox"]
+                        pad = 4
+                        crop_box = (
+                            max(0, int(x0 - pad)),
+                            max(0, int(y0 - pad)),
+                            min(pil_img.width, int(x1 + pad)),
+                            min(pil_img.height, int(y1 + pad))
+                        )
+                        if (crop_box[2] - crop_box[0]) > 10 and (crop_box[3] - crop_box[1]) > 8:
+                            crop_img = pil_img.crop(crop_box)
+                            v_text = vietocr.predict_crop(crop_img)
+                            if v_text:
+                                item["text"] = v_text
+                except Exception as e:
+                    print(f"VietOCR Refinement Error: {e}")
 
             rect = page.rect
             out_page = out_doc.new_page(width=rect.width, height=rect.height)
@@ -80,7 +114,7 @@ class PDFBuilder:
             progress_callback(total_pages, total_pages)
 
         return {
-            "engine": "paddleocr",
+            "engine": "paddleocr_vietocr",
             "total_pages": len(pages_metadata),
             "output_pdf": output_pdf_path,
             "output_docx": output_docx_path,

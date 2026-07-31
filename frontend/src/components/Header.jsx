@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, Upload, FileText, Download, Clock, Loader2, Sparkles, Layers } from 'lucide-react';
+import { Cpu, Upload, FileText, Download, Clock, Loader2, Sparkles, Layers, CheckCircle2 } from 'lucide-react';
 
 export default function Header({ onUpload, isScanning, gpuStatus, resultData, selectedEngine, setSelectedEngine }) {
   const [seconds, setSeconds] = useState(0);
@@ -57,12 +57,13 @@ export default function Header({ onUpload, isScanning, gpuStatus, resultData, se
         </div>
         <div>
           <h1 className="text-lg font-bold tracking-tight text-slate-900 flex items-center space-x-2">
-            <span>Dual-Engine PDF OCR Scanner</span>
-            <span className="text-[10px] bg-blue-50 text-blue-700 font-mono px-2 py-0.5 rounded-full border border-blue-200 font-semibold">
-              PaddleOCR & Docling
+            <span>Dual-Engine PDF Scanner</span>
+            <span className="text-[10px] bg-emerald-50 text-emerald-700 font-mono px-2 py-0.5 rounded-full border border-emerald-200 font-semibold flex items-center space-x-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              <span>+ VietOCR Hybrid</span>
             </span>
           </h1>
-          <p className="text-xs text-slate-500 font-medium">So sánh Mô hình PaddleOCR GPU vs Docling (IBM Research)</p>
+          <p className="text-xs text-slate-500 font-medium">PaddleOCR & Docling tích hợp Transformer VietOCR sửa lỗi chính tả Tiếng Việt</p>
         </div>
       </div>
 
@@ -79,7 +80,7 @@ export default function Header({ onUpload, isScanning, gpuStatus, resultData, se
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Mode 1: PaddleOCR GPU</span>
+            <span>Mode 1: PaddleOCR + VietOCR</span>
           </button>
 
           <button
@@ -92,7 +93,7 @@ export default function Header({ onUpload, isScanning, gpuStatus, resultData, se
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Mode 2: Docling AI (IBM)</span>
+            <span>Mode 2: Docling AI + VietOCR</span>
           </button>
         </div>
 
@@ -108,7 +109,7 @@ export default function Header({ onUpload, isScanning, gpuStatus, resultData, se
             <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
             <Clock className="w-3.5 h-3.5 text-amber-600" />
             <span className="font-bold text-sm">{formatTimer(seconds)}</span>
-            <span className="text-[10px] text-amber-700">Đang scan ({selectedEngine.toUpperCase()})...</span>
+            <span className="text-[10px] text-amber-700">Đang scan + VietOCR...</span>
           </div>
         )}
 
@@ -121,7 +122,7 @@ export default function Header({ onUpload, isScanning, gpuStatus, resultData, se
             : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
         }`}>
           {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-          <span>{isScanning ? `Đang xử lý (${formatTimer(seconds)})` : `Upload PDF (${selectedEngine === 'docling' ? 'Docling' : 'PaddleOCR'})`}</span>
+          <span>{isScanning ? `Đang xử lý (${formatTimer(seconds)})` : `Upload PDF (${selectedEngine === 'docling' ? 'Docling+VietOCR' : 'Paddle+VietOCR'})`}</span>
           <input type="file" accept=".pdf" onChange={onUpload} disabled={isScanning} className="hidden" />
         </label>
 
