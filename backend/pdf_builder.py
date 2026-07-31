@@ -1,21 +1,31 @@
 import fitz  # PyMuPDF
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Callable
 from ocr_engine import OCREngine
 
 class PDFBuilder:
     def __init__(self):
         self.ocr_engine = OCREngine(use_gpu=True)
 
-    def process_pdf(self, input_pdf_path: str, output_pdf_path: str, pages_dir: str = None) -> Dict[str, Any]:
+    def process_pdf(
+        self,
+        input_pdf_path: str,
+        output_pdf_path: str,
+        pages_dir: str = None,
+        progress_callback: Callable[[int, int], None] = None
+    ) -> Dict[str, Any]:
         doc = fitz.open(input_pdf_path)
         out_doc = fitz.open()
         pages_metadata = []
+        total_pages = len(doc)
 
         if pages_dir and not os.path.exists(pages_dir):
             os.makedirs(pages_dir, exist_ok=True)
 
-        for page_idx in range(len(doc)):
+        for page_idx in range(total_pages):
+            if progress_callback:
+                progress_callback(page_idx + 1, total_pages)
+
             page = doc[page_idx]
             pix = page.get_pixmap(dpi=300)
             page_img_path = os.path.join(pages_dir or "/tmp", f"page_{page_idx + 1}.png")
@@ -59,6 +69,9 @@ class PDFBuilder:
         out_doc.save(output_pdf_path)
         out_doc.close()
         doc.close()
+
+        if progress_callback:
+            progress_callback(total_pages, total_pages)
 
         return {
             "total_pages": len(pages_metadata),

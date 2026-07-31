@@ -7,11 +7,16 @@ export const checkStatus = async () => {
   return res.data;
 };
 
-export const uploadAndScanPDF = async (file) => {
+export const startPDFScan = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
   const res = await axios.post(`${API_BASE}/api/scan`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
+  return res.data;
+};
+
+export const getTaskStatus = async (taskId) => {
+  const res = await axios.get(`${API_BASE}/api/task/${taskId}`);
   return res.data;
 };

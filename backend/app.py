@@ -30,6 +30,35 @@ app.mount("/storage", StaticFiles(directory=STORAGE_DIR), name="storage")
 tasks_store = {}
 pdf_builder = PDFBuilder()
 
+def run_pdf_job(task_id: str, upload_path: str, output_path: str, task_pages_dir: str, filename: str):
+    def on_progress(current_page: int, total_pages: int):
+        pct = int((current_page / max(1, total_pages)) * 100)
+        tasks_store[task_id] = {
+            "status": "processing",
+            "current_page": current_page,
+            "total_pages": total_pages,
+            "progress_percent": pct
+        }
+
+    try:
+        result = pdf_builder.process_pdf(
+            upload_path,
+            output_path,
+            task_pages_dir,
+            progress_callback=on_progress
+        )
+        tasks_store[task_id] = {
+            "status": "completed",
+            "current_page": result["total_pages"],
+            "total_pages": result["total_pages"],
+            "progress_percent": 100,
+            "result": result,
+            "original_url": f"/storage/uploads/{task_id}_{filename}",
+            "searchable_url": f"/storage/outputs/{task_id}_searchable.pdf"
+        }
+    except Exception as e:
+        tasks_store[task_id] = {"status": "failed", "error": str(e)}
+
 @app.get("/api/status")
 def get_status():
     return {
@@ -39,7 +68,7 @@ def get_status():
     }
 
 @app.post("/api/scan")
-async def scan_pdf(file: UploadFile = File(...)):
+async def scan_pdf(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
@@ -51,15 +80,26 @@ async def scan_pdf(file: UploadFile = File(...)):
     with open(upload_path, "wb") as f:
         f.write(await file.read())
 
-    try:
-        result = pdf_builder.process_pdf(upload_path, output_path, task_pages_dir)
-        tasks_store[task_id] = {
-            "status": "completed",
-            "result": result,
-            "original_url": f"/storage/uploads/{task_id}_{file.filename}",
-            "searchable_url": f"/storage/outputs/{task_id}_searchable.pdf"
-        }
-        return {"task_id": task_id, "status": "completed", "data": tasks_store[task_id]}
-    except Exception as e:
-        tasks_store[task_id] = {"status": "failed", "error": str(e)}
-        raise HTTPException(status_code=500, detail=str(e))
+    tasks_store[task_id] = {
+        "status": "processing",
+        "current_page": 0,
+        "total_pages": 1,
+        "progress_percent": 0
+    }
+
+    background_tasks.add_task(
+        run_pdf_job,
+        task_id,
+        upload_path,
+        output_path,
+        task_pages_dir,
+        file.filename
+    )
+
+    return {"task_id": task_id, "status": "processing"}
+
+@app.get("/api/task/{task_id}")
+def get_task_status(task_id: str):
+    if task_id not in tasks_store:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return tasks_store[task_id]

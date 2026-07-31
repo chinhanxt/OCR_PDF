@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import DualViewer from './components/DualViewer';
 import LayoutEditor from './components/LayoutEditor';
-import { checkStatus, uploadAndScanPDF } from './api';
-import { Loader2, Clock, Cpu, Sparkles } from 'lucide-react';
+import { checkStatus, startPDFScan, getTaskStatus } from './api';
+import { Loader2, Clock, Cpu, Sparkles, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
   const [gpuStatus, setGpuStatus] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [taskProgress, setTaskProgress] = useState(null);
   const [resultData, setResultData] = useState(null);
   const [activeTab, setActiveTab] = useState('viewer');
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -34,12 +35,35 @@ export default function App() {
     if (!file) return;
 
     setIsScanning(true);
+    setResultData(null);
+    setTaskProgress({ status: 'processing', current_page: 0, total_pages: 1, progress_percent: 0 });
+
     try {
-      const data = await uploadAndScanPDF(file);
-      setResultData(data);
+      const scanRes = await startPDFScan(file);
+      const taskId = scanRes.task_id;
+
+      // Poll task status until complete or failed
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await getTaskStatus(taskId);
+          setTaskProgress(statusRes);
+
+          if (statusRes.status === 'completed') {
+            clearInterval(pollInterval);
+            setResultData({ data: statusRes });
+            setIsScanning(false);
+          } else if (statusRes.status === 'failed') {
+            clearInterval(pollInterval);
+            setIsScanning(false);
+            alert("Lỗi khi scan PDF: " + (statusRes.error || "Unknown error"));
+          }
+        } catch (err) {
+          console.error("Polling error:", err);
+        }
+      }, 800);
+
     } catch (err) {
-      alert("Lỗi khi scan PDF: " + err.message);
-    } finally {
+      alert("Lỗi khi tải file PDF: " + err.message);
       setIsScanning(false);
     }
   };
@@ -79,9 +103,9 @@ export default function App() {
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col relative">
-        {/* Live Processing Overlay Modal */}
+        {/* Real-Time Processing Progress Modal */}
         {isScanning && (
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-6">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl flex flex-col items-center text-center">
               <div className="relative mb-6">
                 <div className="w-20 h-20 bg-blue-600/20 border border-blue-500/30 rounded-2xl flex items-center justify-center animate-pulse">
@@ -93,7 +117,25 @@ export default function App() {
               </div>
 
               <h3 className="text-xl font-bold text-white mb-1">Đang Scan & Nhận diện PDF</h3>
-              <p className="text-xs text-slate-400 mb-6">Mô hình PaddleOCR GPU + VietOCR Batch Processing</p>
+              <p className="text-xs text-slate-400 mb-6">Mô hình PaddleOCR GPU Gia tốc Tiếng Việt</p>
+
+              {/* Progress Bar & Percentage */}
+              <div className="w-full mb-6">
+                <div className="flex justify-between items-center text-xs font-semibold mb-2">
+                  <span className="text-slate-300">
+                    Trang {taskProgress?.current_page || 0} / {taskProgress?.total_pages || 1}
+                  </span>
+                  <span className="text-blue-400 font-mono font-bold text-sm">
+                    {taskProgress?.progress_percent || 0}%
+                  </span>
+                </div>
+                <div className="w-full bg-slate-950 rounded-full h-3 p-0.5 border border-slate-800">
+                  <div
+                    className="bg-gradient-to-r from-blue-600 to-emerald-400 h-full rounded-full transition-all duration-300 shadow-sm"
+                    style={{ width: `${taskProgress?.progress_percent || 0}%` }}
+                  />
+                </div>
+              </div>
 
               {/* Real-time Timer display */}
               <div className="w-full bg-slate-950 rounded-xl p-4 border border-slate-800 mb-6 flex justify-around items-center">
@@ -118,7 +160,7 @@ export default function App() {
 
               <div className="w-full bg-slate-800/50 rounded-lg p-3 text-xs text-slate-300 flex items-center justify-center space-x-2 border border-slate-700/50">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>Đang trích xuất văn bản & tiếng Việt 100% đầy đủ dấu...</span>
+                <span>Đang xử lý trang {taskProgress?.current_page || 0} trên GPU...</span>
               </div>
             </div>
           </div>
