@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Link, Unlink, ExternalLink, Layers, Eye } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Link, Unlink, ExternalLink, Layers, Eye, FileText, CheckCircle2 } from 'lucide-react';
 
 export default function DualViewer({ resultData }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [zoom, setZoom] = useState(100);
   const [syncScroll, setSyncScroll] = useState(true);
-  const [rightViewMode, setRightViewMode] = useState('overlay'); // 'overlay' | 'pdf'
+  const [rightViewMode, setRightViewMode] = useState('bboxes'); // 'bboxes' | 'digital' | 'pdf'
+  const [hoveredBoxId, setHoveredBoxId] = useState(null);
 
   const leftRef = useRef(null);
   const rightRef = useRef(null);
@@ -45,6 +46,7 @@ export default function DualViewer({ resultData }) {
   const pages = resultData.data.result.pages;
   const totalPages = pages.length;
   const activePage = pages[currentPage - 1];
+  const isDoclingMode = resultData.data.result.engine === 'docling';
 
   const imgSubPath = activePage?.image_path ? activePage.image_path.split('/').slice(-2).join('/') : '';
   const pageImgUrl = `http://localhost:8000/storage/pages/${imgSubPath}`;
@@ -73,24 +75,36 @@ export default function DualViewer({ resultData }) {
             </button>
           </div>
 
+          {/* Right Side View Mode Selector */}
           <div className="flex items-center space-x-1 bg-slate-100 rounded-lg p-1 border border-slate-300">
             <button
-              onClick={() => setRightViewMode('overlay')}
-              className={`px-3 py-1 text-xs font-semibold rounded-md flex items-center space-x-1 transition ${
-                rightViewMode === 'overlay' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              onClick={() => setRightViewMode('bboxes')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md flex items-center space-x-1.5 transition ${
+                rightViewMode === 'bboxes' ? 'bg-blue-600 text-white shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>Lớp Text Khớp 1:1</span>
+              <span>Khung Bounding Box OCR ({activePage.ocr_items.length} Khối)</span>
             </button>
+
+            <button
+              onClick={() => setRightViewMode('digital')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md flex items-center space-x-1.5 transition ${
+                rightViewMode === 'digital' ? 'bg-blue-600 text-white shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Văn bản Digital Sạch</span>
+            </button>
+
             <button
               onClick={() => setRightViewMode('pdf')}
-              className={`px-3 py-1 text-xs font-semibold rounded-md flex items-center space-x-1 transition ${
-                rightViewMode === 'pdf' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              className={`px-3 py-1 text-xs font-semibold rounded-md flex items-center space-x-1.5 transition ${
+                rightViewMode === 'pdf' ? 'bg-blue-600 text-white shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>Viewer PDF</span>
+              <span>Layer Searchable PDF</span>
             </button>
           </div>
         </div>
@@ -134,7 +148,7 @@ export default function DualViewer({ resultData }) {
         <div
           ref={leftRef}
           onScroll={handleLeftScroll}
-          className="bg-white rounded-xl p-3 overflow-auto flex flex-col items-center border border-slate-200 shadow-sm"
+          className="bg-white rounded-xl p-3 overflow-auto flex flex-col items-center border border-slate-200 shadow-sm relative"
         >
           <div className="w-full flex justify-between items-center mb-2 px-2 shrink-0 sticky top-0 bg-white/90 backdrop-blur z-20 py-1.5 border-b border-slate-100">
             <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Trang PDF Gốc (Original Scan)</span>
@@ -154,41 +168,48 @@ export default function DualViewer({ resultData }) {
         <div
           ref={rightRef}
           onScroll={handleRightScroll}
-          className="bg-white rounded-xl p-3 overflow-auto flex flex-col items-center border border-slate-200 shadow-sm"
+          className="bg-white rounded-xl p-3 overflow-auto flex flex-col items-center border border-slate-200 shadow-sm relative"
         >
           <div className="w-full flex justify-between items-center mb-2 px-2 shrink-0 sticky top-0 bg-white/90 backdrop-blur z-20 py-1.5 border-b border-slate-100">
-            <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">Trang sau khi Scan (Searchable OCR Layer)</span>
-            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-              ✨ 100% Khớp vị trí Bbox
+            <span className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center space-x-1.5">
+              <span>{isDoclingMode ? 'Kết quả Bóc tách Docling AI' : 'Kết quả OCR PaddleOCR GPU'}</span>
+            </span>
+            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center space-x-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              <span>Đã bóc tách {activePage.ocr_items.length} khối chữ</span>
             </span>
           </div>
+
           <div className="w-full flex justify-center items-start">
-            {rightViewMode === 'overlay' ? (
+            {rightViewMode === 'bboxes' && (
               <div
-                className="relative shadow-lg rounded border border-slate-200 bg-white transition-all duration-150 overflow-hidden"
+                className="relative shadow-lg rounded border border-slate-300 bg-white transition-all duration-150 overflow-hidden"
                 style={{
                   width: `${zoom}%`,
                   aspectRatio: `${activePage.width} / ${activePage.height}`
                 }}
               >
-                {/* Background high-res clean image */}
+                {/* Background image dimmed slightly so bounding boxes POP */}
                 <img
                   src={pageImgUrl}
                   alt={`Scanned Page ${currentPage}`}
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-contain brightness-95 opacity-85"
                 />
 
-                {/* Exact Bounding Box Text Overlay */}
+                {/* VISIBLE HIGH-CONTRAST BOUNDING BOX OVERLAY */}
                 {activePage.ocr_items.map((item) => {
                   const [x0, y0, x1, y1] = item.bbox;
                   const leftPct = (x0 / activePage.width) * 100;
                   const topPct = (y0 / activePage.height) * 100;
-                  const widthPct = ((x1 - x0) / activePage.width) * 100;
-                  const heightPct = ((y1 - y0) / activePage.height) * 100;
+                  const widthPct = Math.max(0.5, ((x1 - x0) / activePage.width) * 100);
+                  const heightPct = Math.max(0.5, ((y1 - y0) / activePage.height) * 100);
+                  const isHovered = hoveredBoxId === item.id;
 
                   return (
                     <div
                       key={item.id}
+                      onMouseEnter={() => setHoveredBoxId(item.id)}
+                      onMouseLeave={() => setHoveredBoxId(null)}
                       style={{
                         position: 'absolute',
                         left: `${leftPct}%`,
@@ -196,17 +217,58 @@ export default function DualViewer({ resultData }) {
                         width: `${widthPct}%`,
                         height: `${heightPct}%`,
                       }}
-                      className="group border border-blue-500/30 hover:border-blue-600 bg-blue-500/10 hover:bg-blue-500/25 cursor-text select-text transition rounded-xs flex items-center"
+                      className={`border transition-all cursor-pointer rounded-xs flex items-center ${
+                        isHovered
+                          ? 'border-emerald-500 bg-emerald-400/40 z-30 ring-2 ring-emerald-400 scale-[1.02]'
+                          : isDoclingMode
+                          ? 'border-purple-500/70 bg-purple-500/20 hover:bg-purple-500/40'
+                          : 'border-blue-500/70 bg-blue-500/20 hover:bg-blue-500/40'
+                      }`}
                       title={`${item.text} (${(item.confidence * 100).toFixed(1)}%)`}
                     >
-                      <span className="opacity-0 group-hover:opacity-100 text-[9px] font-mono bg-blue-700 text-white px-1.5 py-0.5 rounded absolute -top-5 left-0 z-30 pointer-events-none shadow">
+                      {/* Floating tooltip preview */}
+                      <span className={`text-[10px] font-medium leading-none px-1 py-0.5 rounded absolute -top-5 left-0 z-40 pointer-events-none shadow transition ${
+                        isHovered ? 'bg-emerald-700 text-white font-bold opacity-100 scale-110' : 'bg-slate-900/90 text-slate-100 opacity-0 group-hover:opacity-100'
+                      }`}>
                         {item.text}
                       </span>
                     </div>
                   );
                 })}
               </div>
-            ) : (
+            )}
+
+            {rightViewMode === 'digital' && (
+              <div
+                className="bg-white rounded-lg border border-slate-300 p-8 shadow-sm text-slate-800 space-y-3 font-sans overflow-auto"
+                style={{ width: `${zoom}%`, minHeight: '800px' }}
+              >
+                <div className="border-b border-slate-200 pb-3 mb-4 flex justify-between items-center">
+                  <h4 className="text-sm font-bold text-blue-800 uppercase tracking-wide">
+                    📄 Văn bản Kĩ thuật số Được Bóc Tách (Trang {currentPage})
+                  </h4>
+                  <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">
+                    {activePage.ocr_items.length} Khối chữ
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {activePage.ocr_items.map((item, idx) => (
+                    <div
+                      key={item.id || idx}
+                      className="p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-md transition text-sm flex items-start justify-between"
+                    >
+                      <span className="font-medium text-slate-900 leading-relaxed">{item.text}</span>
+                      <span className="text-[10px] font-mono text-slate-400 shrink-0 ml-3 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                        {(item.confidence * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {rightViewMode === 'pdf' && (
               <iframe
                 src={pdfUrl}
                 title="Searchable PDF Preview"
