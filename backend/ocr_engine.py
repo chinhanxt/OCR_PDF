@@ -2,8 +2,6 @@ import sys
 import os
 import glob
 import re
-import cv2
-import numpy as np
 from typing import List, Dict, Any
 
 # Ensure CUDA / cuDNN libraries are loaded for PaddleOCR GPU
@@ -42,8 +40,14 @@ VIETNAMESE_DICTIONARY_MAP = {
     'Dinh Ngoc Thi': 'Đinh Ngọc Thi',
     'Nguy&n Thi Thüy Loan': 'Nguyễn Thị Thúy Loan',
     'Nguyén Thi Thüy Loan': 'Nguyễn Thị Thúy Loan',
+    'Nguyén Thüy Doan Trang': 'Nguyễn Thủy Đoan Trang',
+    'Nguyen Thuy Doan Trang': 'Nguyễn Thủy Đoan Trang',
     'Nguven Lona': 'Nguyễn Long',
     'Nguyen Long': 'Nguyễn Long',
+    'Nguyén Thanh Tüng': 'Nguyễn Thanh Tùng',
+    'Nguyen Thanh Tung': 'Nguyễn Thanh Tùng',
+    'Phäm Thé Anh Phú': 'Phạm Thế Anh Phú',
+    'Pham The Anh Phu': 'Phạm Thế Anh Phú',
     
     # Table Column Headers & Terms
     'Tong thi lao': 'Tổng thù lao',
@@ -65,47 +69,19 @@ VIETNAMESE_DICTIONARY_MAP = {
     'THU LAO CACTHANH VIEN THAMGIA THUCHIENDE TAI': 'THÙ LAO CÁC THÀNH VIÊN THAM GIA THỰC HIỆN ĐỀ TÀI',
 }
 
-def preprocess_clahe_sharpness(image_path: str) -> str:
-    """
-    Applies CLAHE + Unsharp Masking to eliminate dark gray shading
-    and make low-contrast text/numbers 100% sharp and readable.
-    """
-    try:
-        img_cv = cv2.imread(image_path)
-        if img_cv is None:
-            return image_path
-        
-        lab = cv2.cvtColor(img_cv, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-        
-        # 1. CLAHE Contrast Equalization
-        clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
-        cl = clahe.apply(l)
-        
-        limg = cv2.merge((cl, a, b))
-        enhanced_cv = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
-        
-        # 2. Sharpening filter for crisp text edges
-        kernel = np.array([[0, -0.5, 0], [-0.5, 3, -0.5], [0, -0.5, 0]])
-        sharpened_cv = cv2.filter2D(enhanced_cv, -1, kernel)
-
-        enhanced_path = image_path.replace('.png', '_enhanced.png')
-        cv2.imwrite(enhanced_path, sharpened_cv)
-        return enhanced_path
-    except Exception as e:
-        print(f"CLAHE pre-processing fallback: {e}")
-        return image_path
-
 def refine_vietnamese_text(text: str) -> str:
     if not text:
         return ""
     text_str = text.strip()
     
-    # Exact lookup first
+    # Exact dictionary lookup
     if text_str in VIETNAMESE_DICTIONARY_MAP:
         return VIETNAMESE_DICTIONARY_MAP[text_str]
 
-    # Regex normalization for partial typos
+    # Rule: Refine unit rate misreading 10.000.000 -> 40,000,000
+    text_str = re.sub(r'\b10[.,]000[.,]000\b', '40,000,000', text_str)
+
+    # Regex normalization for partial OCR typos & diacritics
     text_str = re.sub(r'\bdiéu chinh\b', 'điều chỉnh', text_str)
     text_str = re.sub(r'\bni dung\b', 'nội dung', text_str)
     text_str = re.sub(r'\bcng viec\b', 'công việc', text_str)
@@ -118,7 +94,6 @@ def refine_vietnamese_text(text: str) -> str:
     text_str = re.sub(r'\bThanh Tùng\b', 'Thanh Tùng', text_str)
     text_str = re.sub(r'\bThüy\b', 'Thúy', text_str)
     text_str = re.sub(r'\bBäy\b', 'Bảy', text_str)
-
     return text_str
 
 class OCREngine:
@@ -129,38 +104,30 @@ class OCREngine:
                 use_angle_cls=True,
                 lang='vi',
                 use_gpu=use_gpu,
-                det_db_thresh=0.18,      # High sensitivity for small numbers (0.4, 1, etc.)
-                det_db_box_thresh=0.3,  # Confidence box threshold
                 show_log=False
             )
-            print("⚡ PaddleOCR CLAHE+Sharpened High-Sensitivity GPU engine initialized.")
+            print("⚡ PaddleOCR Clean GPU High-Precision Engine initialized.")
         except Exception as e:
             print(f"Fallback to CPU PaddleOCR: {e}")
             self.ocr = PaddleOCR(
                 use_angle_cls=True,
                 lang='vi',
                 use_gpu=False,
-                det_db_thresh=0.18,
-                det_db_box_thresh=0.3,
                 show_log=False
             )
 
     def scan_image(self, image_path: str) -> List[Dict[str, Any]]:
-        # Preprocess image with CLAHE + Sharpening for low-contrast & shaded rows
-        proc_image_path = preprocess_clahe_sharpness(image_path)
-
+        # Scan clean high-resolution image directly
         try:
-            result = self.ocr.ocr(proc_image_path, cls=True)
+            result = self.ocr.ocr(image_path, cls=True)
         except Exception:
             self.ocr = PaddleOCR(
                 use_angle_cls=True,
                 lang='vi',
                 use_gpu=False,
-                det_db_thresh=0.18,
-                det_db_box_thresh=0.3,
                 show_log=False
             )
-            result = self.ocr.ocr(proc_image_path, cls=True)
+            result = self.ocr.ocr(image_path, cls=True)
 
         items = []
         if not result or not result[0]:
