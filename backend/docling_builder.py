@@ -8,7 +8,7 @@ from docx_builder import DOCXBuilder
 
 class DoclingBuilder:
     def __init__(self, use_vietocr: bool = True):
-        print("⚡ Initializing Docling Engine with VietOCR Diacritics Refinement...")
+        print("⚡ Initializing Docling Engine with Ultra-Precision VietOCR Refinement...")
         pipeline_options = PdfPipelineOptions()
         pipeline_options.accelerator_options = AcceleratorOptions(
             num_threads=4,
@@ -77,9 +77,9 @@ class DoclingBuilder:
                                 b = p.bbox
                                 try:
                                     tl_b = b.to_top_left_origin(page_height)
-                                    bbox_coords = [tl_b.l, tl_b.t, tl_b.r, tl_b.b]
+                                    bbox_coords = [float(tl_b.l), float(tl_b.t), float(tl_b.r), float(tl_b.b)]
                                 except Exception:
-                                    bbox_coords = [b.l, page_height - b.t, b.r, page_height - b.b]
+                                    bbox_coords = [float(b.l), float(page_height - b.t), float(b.r), float(page_height - b.b)]
                                 break
 
                     if bbox_coords:
@@ -106,9 +106,9 @@ class DoclingBuilder:
                                         b = p.bbox
                                         try:
                                             tl_b = b.to_top_left_origin(page_height)
-                                            bbox_coords = [tl_b.l, tl_b.t, tl_b.r, tl_b.b]
+                                            bbox_coords = [float(tl_b.l), float(tl_b.t), float(tl_b.r), float(tl_b.b)]
                                         except Exception:
-                                            bbox_coords = [b.l, page_height - b.t, b.r, page_height - b.b]
+                                            bbox_coords = [float(b.l), float(page_height - b.t), float(b.r), float(page_height - b.b)]
                                         break
 
                             if bbox_coords:
@@ -133,13 +133,15 @@ class DoclingBuilder:
             scale_x = rect.width / pix.width
             scale_y = rect.height / pix.height
 
-            # ⚡ Refine extracted texts & cell values with VietOCR Transformer
-            if vietocr:
+            # ⚡ Refine extracted texts & cell values with VietOCR Transformer (batch mode)
+            if vietocr and page_items:
                 try:
                     pil_img = Image.open(page_img_path)
+                    crop_imgs = []
+                    valid_items = []
+
                     for item in page_items:
                         x0, y0, x1, y1 = item["bbox"]
-                        # Scale back to 300 dpi image pixels
                         px0 = int((x0 / scale_x))
                         py0 = int((y0 / scale_y))
                         px1 = int((x1 / scale_x))
@@ -152,8 +154,12 @@ class DoclingBuilder:
                             min(pil_img.height, py1 + pad)
                         )
                         if (crop_box[2] - crop_box[0]) > 10 and (crop_box[3] - crop_box[1]) > 8:
-                            crop_img = pil_img.crop(crop_box)
-                            v_text = vietocr.predict_crop(crop_img)
+                            crop_imgs.append(pil_img.crop(crop_box))
+                            valid_items.append(item)
+
+                    if crop_imgs:
+                        v_texts = vietocr.predict_batch(crop_imgs)
+                        for item, v_text in zip(valid_items, v_texts):
                             if v_text:
                                 item["text"] = v_text
                 except Exception as e:
@@ -172,8 +178,8 @@ class DoclingBuilder:
 
             pages_metadata.append({
                 "page_number": page_no,
-                "width": rect.width,
-                "height": rect.height,
+                "width": float(rect.width),
+                "height": float(rect.height),
                 "image_path": page_img_path,
                 "ocr_items": [
                     {
@@ -181,9 +187,9 @@ class DoclingBuilder:
                         "type": item.get("type", "text"),
                         "row": item.get("row"),
                         "col": item.get("col"),
-                        "bbox": [item["bbox"][0]*scale_x, item["bbox"][1]*scale_y, item["bbox"][2]*scale_x, item["bbox"][3]*scale_y],
+                        "bbox": [float(item["bbox"][0]*scale_x), float(item["bbox"][1]*scale_y), float(item["bbox"][2]*scale_x), float(item["bbox"][3]*scale_y)],
                         "text": item["text"],
-                        "confidence": item["confidence"]
+                        "confidence": float(item["confidence"])
                     }
                     for i, item in enumerate(page_items)
                 ]

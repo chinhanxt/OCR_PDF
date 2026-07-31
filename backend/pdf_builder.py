@@ -48,10 +48,13 @@ class PDFBuilder:
 
             ocr_results = self.ocr_engine.scan_image(page_img_path)
 
-            # Refine texts using VietOCR Transformer
-            if vietocr:
+            # Refine text items using VietOCR Transformer
+            if vietocr and ocr_results:
                 try:
                     pil_img = Image.open(page_img_path)
+                    crop_imgs = []
+                    valid_items = []
+
                     for item in ocr_results:
                         x0, y0, x1, y1 = item["bbox"]
                         pad = 4
@@ -62,8 +65,12 @@ class PDFBuilder:
                             min(pil_img.height, int(y1 + pad))
                         )
                         if (crop_box[2] - crop_box[0]) > 10 and (crop_box[3] - crop_box[1]) > 8:
-                            crop_img = pil_img.crop(crop_box)
-                            v_text = vietocr.predict_crop(crop_img)
+                            crop_imgs.append(pil_img.crop(crop_box))
+                            valid_items.append(item)
+
+                    if crop_imgs:
+                        v_texts = vietocr.predict_batch(crop_imgs)
+                        for item, v_text in zip(valid_items, v_texts):
                             if v_text:
                                 item["text"] = v_text
                 except Exception as e:
@@ -78,25 +85,25 @@ class PDFBuilder:
 
             for item in ocr_results:
                 x0, y0, x1, y1 = item["bbox"]
-                pdf_rect = fitz.Rect(x0 * scale_x, y0 * scale_y, x1 * scale_x, y1 * scale_y)
+                pdf_rect = fitz.Rect(float(x0 * scale_x), float(y0 * scale_y), float(x1 * scale_x), float(y1 * scale_y))
                 out_page.insert_text(
                     pdf_rect.tl,
                     item["text"],
-                    fontsize=max(6, (y1 - y0) * scale_y * 0.75),
+                    fontsize=float(max(6, (y1 - y0) * scale_y * 0.75)),
                     render_mode=3
                 )
 
             pages_metadata.append({
                 "page_number": page_idx + 1,
-                "width": rect.width,
-                "height": rect.height,
+                "width": float(rect.width),
+                "height": float(rect.height),
                 "image_path": page_img_path,
                 "ocr_items": [
                     {
                         "id": f"p{page_idx+1}_{i}",
-                        "bbox": [item["bbox"][0]*scale_x, item["bbox"][1]*scale_y, item["bbox"][2]*scale_x, item["bbox"][3]*scale_y],
+                        "bbox": [float(item["bbox"][0]*scale_x), float(item["bbox"][1]*scale_y), float(item["bbox"][2]*scale_x), float(item["bbox"][3]*scale_y)],
                         "text": item["text"],
-                        "confidence": item["confidence"]
+                        "confidence": float(item["confidence"])
                     }
                     for i, item in enumerate(ocr_results)
                 ]
@@ -114,7 +121,7 @@ class PDFBuilder:
             progress_callback(total_pages, total_pages)
 
         return {
-            "engine": "paddleocr_vietocr",
+            "engine": "rapidocr_vietocr",
             "total_pages": len(pages_metadata),
             "output_pdf": output_pdf_path,
             "output_docx": output_docx_path,
