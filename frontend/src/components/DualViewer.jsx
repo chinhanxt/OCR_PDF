@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Link, Unlink, ExternalLink, Layers, Eye } from 'lucide-react';
 
 export default function DualViewer({ resultData }) {
@@ -6,6 +6,33 @@ export default function DualViewer({ resultData }) {
   const [zoom, setZoom] = useState(100);
   const [syncScroll, setSyncScroll] = useState(true);
   const [rightViewMode, setRightViewMode] = useState('overlay'); // 'overlay' | 'pdf'
+
+  const leftRef = useRef(null);
+  const rightRef = useRef(null);
+  const isSyncingLeft = useRef(false);
+  const isSyncingRight = useRef(false);
+
+  const handleLeftScroll = () => {
+    if (!syncScroll || !leftRef.current || !rightRef.current) return;
+    if (isSyncingRight.current) {
+      isSyncingRight.current = false;
+      return;
+    }
+    isSyncingLeft.current = true;
+    rightRef.current.scrollTop = leftRef.current.scrollTop;
+    rightRef.current.scrollLeft = leftRef.current.scrollLeft;
+  };
+
+  const handleRightScroll = () => {
+    if (!syncScroll || !leftRef.current || !rightRef.current) return;
+    if (isSyncingLeft.current) {
+      isSyncingLeft.current = false;
+      return;
+    }
+    isSyncingRight.current = true;
+    leftRef.current.scrollTop = rightRef.current.scrollTop;
+    leftRef.current.scrollLeft = rightRef.current.scrollLeft;
+  };
 
   if (!resultData || !resultData.data?.result) {
     return (
@@ -76,7 +103,7 @@ export default function DualViewer({ resultData }) {
             }`}
           >
             {syncScroll ? <Link className="w-3.5 h-3.5 text-blue-400" /> : <Unlink className="w-3.5 h-3.5" />}
-            <span>Đồng bộ Cuộn 1-vs-1</span>
+            <span>Đồng bộ Cuộn 1-vs-1 {syncScroll ? '(Đang bật)' : '(Đang tắt)'}</span>
           </button>
 
           <div className="flex items-center space-x-1 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700">
@@ -104,12 +131,16 @@ export default function DualViewer({ resultData }) {
       {/* 1-vs-1 Large Split Viewer */}
       <div className="flex-1 grid grid-cols-2 gap-3 p-3 overflow-hidden">
         {/* Left Side: Original Scan Image */}
-        <div className="bg-slate-900 rounded-xl p-3 overflow-auto flex flex-col items-center border border-slate-800 shadow-inner">
-          <div className="w-full flex justify-between items-center mb-2 px-2 shrink-0">
+        <div
+          ref={leftRef}
+          onScroll={handleLeftScroll}
+          className="bg-slate-900 rounded-xl p-3 overflow-auto flex flex-col items-center border border-slate-800 shadow-inner"
+        >
+          <div className="w-full flex justify-between items-center mb-2 px-2 shrink-0 sticky top-0 bg-slate-900/90 backdrop-blur z-20 py-1 border-b border-slate-800">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Trang PDF Gốc (Original Scan)</span>
             <span className="text-[10px] text-slate-500 font-mono">{activePage.width}x{activePage.height} pt</span>
           </div>
-          <div className="flex-1 w-full flex justify-center items-start overflow-auto">
+          <div className="w-full flex justify-center items-start">
             <img
               src={pageImgUrl}
               alt={`Original Page ${currentPage}`}
@@ -120,12 +151,16 @@ export default function DualViewer({ resultData }) {
         </div>
 
         {/* Right Side: Scan Overlay / Searchable Layer (Clean 1:1 Match) */}
-        <div className="bg-slate-900 rounded-xl p-3 overflow-auto flex flex-col items-center border border-slate-800 shadow-inner">
-          <div className="w-full flex justify-between items-center mb-2 px-2 shrink-0">
+        <div
+          ref={rightRef}
+          onScroll={handleRightScroll}
+          className="bg-slate-900 rounded-xl p-3 overflow-auto flex flex-col items-center border border-slate-800 shadow-inner"
+        >
+          <div className="w-full flex justify-between items-center mb-2 px-2 shrink-0 sticky top-0 bg-slate-900/90 backdrop-blur z-20 py-1 border-b border-slate-800">
             <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Trang sau khi Scan (Searchable OCR Layer)</span>
             <span className="text-[10px] text-emerald-400 font-medium">✨ 100% Khớp vị trí Bbox</span>
           </div>
-          <div className="flex-1 w-full flex justify-center items-start overflow-auto">
+          <div className="w-full flex justify-center items-start">
             {rightViewMode === 'overlay' ? (
               <div
                 className="relative shadow-2xl rounded border border-slate-700 bg-white transition-all duration-150 overflow-hidden"
@@ -173,7 +208,7 @@ export default function DualViewer({ resultData }) {
               <iframe
                 src={pdfUrl}
                 title="Searchable PDF Preview"
-                style={{ width: `${zoom}%`, height: '100%' }}
+                style={{ width: `${zoom}%`, height: '100%', minHeight: '800px' }}
                 className="rounded border border-slate-700 bg-white"
               />
             )}
@@ -183,4 +218,5 @@ export default function DualViewer({ resultData }) {
     </div>
   );
 }
+
 
