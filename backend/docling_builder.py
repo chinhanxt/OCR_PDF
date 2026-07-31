@@ -1,12 +1,17 @@
 import os
 import fitz  # PyMuPDF
 from typing import List, Dict, Any, Callable
-from docling.document_converter import DocumentConverter
+from docling.datamodel.pipeline_options import PdfPipelineOptions, AcceleratorOptions, AcceleratorDevice
+from docling.document_converter import DocumentConverter, PdfFormatOption
 
 class DoclingBuilder:
     def __init__(self):
-        print("⚡ Initializing Docling Document Converter Engine...")
-        self.converter = DocumentConverter()
+        print("⚡ Initializing Docling Engine with GPU CUDA acceleration...")
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.accelerator_options = AcceleratorOptions(num_threads=8, device=AcceleratorDevice.CUDA)
+        pipeline_options.do_ocr = True
+        pipeline_options.do_table_structure = True
+        self.converter = DocumentConverter(format_options={'pdf': PdfFormatOption(pipeline_options=pipeline_options)})
 
     def process_pdf(
         self,
@@ -22,32 +27,6 @@ class DoclingBuilder:
 
         if pages_dir and not os.path.exists(pages_dir):
             os.makedirs(pages_dir, exist_ok=True)
-
-        # Run Docling Document Converter
-        conv_res = self.converter.convert(input_pdf_path)
-        docling_doc = conv_res.document
-
-        # Group extracted texts by page
-        text_by_page = {}
-        if hasattr(docling_doc, 'texts') and docling_doc.texts:
-            for item in docling_doc.texts:
-                if hasattr(item, 'prov') and item.prov:
-                    for p in item.prov:
-                        page_no = p.page_no
-                        if page_no not in text_by_page:
-                            text_by_page[page_no] = []
-                        
-                        # Get bbox if available
-                        bbox_coords = [0, 0, 100, 20]
-                        if hasattr(p, 'bbox') and p.bbox:
-                            b = p.bbox
-                            bbox_coords = [b.l, b.t, b.r, b.b]
-                        
-                        text_by_page[page_no].append({
-                            "text": item.text,
-                            "bbox": bbox_coords,
-                            "confidence": 0.95
-                        })
 
         for page_idx in range(total_pages):
             page_no = page_idx + 1
@@ -66,7 +45,27 @@ class DoclingBuilder:
             scale_x = rect.width / pix.width
             scale_y = rect.height / pix.height
 
-            page_items = text_by_page.get(page_no, [])
+            # Run Docling conversion for this specific page range (page_no, page_no)
+            page_items = []
+            try:
+                conv_res = self.converter.convert(input_pdf_path, page_range=(page_no, page_no))
+                docling_doc = conv_res.document
+                if hasattr(docling_doc, 'texts') and docling_doc.texts:
+                    for item in docling_doc.texts:
+                        bbox_coords = [20, 20, 200, 40]
+                        if hasattr(item, 'prov') and item.prov:
+                            for p in item.prov:
+                                if hasattr(p, 'bbox') and p.bbox:
+                                    b = p.bbox
+                                    bbox_coords = [b.l, b.t, b.r, b.b]
+                        
+                        page_items.append({
+                            "text": item.text,
+                            "bbox": bbox_coords,
+                            "confidence": 0.95
+                        })
+            except Exception as e:
+                print(f"Docling page {page_no} extraction note: {e}")
 
             for item in page_items:
                 x0, y0, x1, y1 = item["bbox"]
