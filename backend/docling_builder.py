@@ -7,7 +7,7 @@ from docx_builder import DOCXBuilder
 
 class DoclingBuilder:
     def __init__(self):
-        print("⚡ Initializing Docling Engine with Page-by-Page Progress Tracking...")
+        print("⚡ Initializing Docling Engine with Precision Bounding Box Origin...")
         pipeline_options = PdfPipelineOptions()
         pipeline_options.accelerator_options = AcceleratorOptions(
             num_threads=4,
@@ -35,6 +35,9 @@ class DoclingBuilder:
 
         for page_idx in range(total_pages):
             page_no = page_idx + 1
+            page = doc[page_idx]
+            page_rect = page.rect
+            page_height = page_rect.height
 
             # ⚡ Live progress update for web modal
             if progress_callback:
@@ -48,27 +51,33 @@ class DoclingBuilder:
 
             page_items = []
 
-            # 1. Extract Paragraph Texts
+            # 1. Extract Paragraph Texts with Top-Left Origin Conversion
             if hasattr(docling_doc, 'texts') and docling_doc.texts:
                 for item in docling_doc.texts:
                     if not item.text or not item.text.strip():
                         continue
                     
-                    bbox_coords = [30, 30, 250, 50]
+                    bbox_coords = None
                     if hasattr(item, 'prov') and item.prov:
                         for p in item.prov:
                             if hasattr(p, 'bbox') and p.bbox:
                                 b = p.bbox
-                                bbox_coords = [b.l, b.t, b.r, b.b]
+                                try:
+                                    tl_b = b.to_top_left_origin(page_height)
+                                    bbox_coords = [tl_b.l, tl_b.t, tl_b.r, tl_b.b]
+                                except Exception:
+                                    bbox_coords = [b.l, page_height - b.t, b.r, page_height - b.b]
+                                break
 
-                    page_items.append({
-                        "type": "text",
-                        "text": item.text.strip(),
-                        "bbox": bbox_coords,
-                        "confidence": 0.96
-                    })
+                    if bbox_coords:
+                        page_items.append({
+                            "type": "text",
+                            "text": item.text.strip(),
+                            "bbox": bbox_coords,
+                            "confidence": 0.96
+                        })
 
-            # 2. Extract Structured Table Cells (TableFormer)
+            # 2. Extract Structured Table Cells (TableFormer) with Top-Left Origin Conversion
             if hasattr(docling_doc, 'tables') and docling_doc.tables:
                 for t_idx, table in enumerate(docling_doc.tables):
                     if hasattr(table, 'data') and hasattr(table.data, 'table_cells'):
@@ -77,24 +86,29 @@ class DoclingBuilder:
                             if not cell_text:
                                 continue
                             
-                            bbox_coords = [40, 40, 200, 60]
+                            bbox_coords = None
                             if hasattr(cell, 'prov') and cell.prov:
                                 for p in cell.prov:
                                     if hasattr(p, 'bbox') and p.bbox:
                                         b = p.bbox
-                                        bbox_coords = [b.l, b.t, b.r, b.b]
+                                        try:
+                                            tl_b = b.to_top_left_origin(page_height)
+                                            bbox_coords = [tl_b.l, tl_b.t, tl_b.r, tl_b.b]
+                                        except Exception:
+                                            bbox_coords = [b.l, page_height - b.t, b.r, page_height - b.b]
+                                        break
 
-                            page_items.append({
-                                "type": "table_cell",
-                                "row": cell.start_row_offset_idx,
-                                "col": cell.start_col_offset_idx,
-                                "text": cell_text,
-                                "bbox": bbox_coords,
-                                "confidence": 0.98
-                            })
+                            if bbox_coords:
+                                page_items.append({
+                                    "type": "table_cell",
+                                    "row": cell.start_row_offset_idx,
+                                    "col": cell.start_col_offset_idx,
+                                    "text": cell_text,
+                                    "bbox": bbox_coords,
+                                    "confidence": 0.98
+                                })
 
             # Render page image and searchable PDF layer
-            page = doc[page_idx]
             pix = page.get_pixmap(dpi=300)
             page_img_path = os.path.join(pages_dir or "/tmp", f"page_{page_no}.png")
             pix.save(page_img_path)
