@@ -20,6 +20,10 @@
 
 ---
 
+![Vấn Đề & Giải Pháp Kiến Trúc Hệ Thống](docs/problem_architecture.png)
+
+---
+
 ## 📸 Demo Giao Diện Ứng Dụng
 
 ![Tri-Engine PDF Scanner Interface](docs/demo.png)
