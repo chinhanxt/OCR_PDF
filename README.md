@@ -26,6 +26,12 @@
 
 ---
 
+## 🏗️ Kiến Trúc Hệ Thống (System Architecture)
+
+![Kiến Trúc Hệ Thống OCR Đa Động Cơ](docs/system_architecture.png)
+
+---
+
 ## ✨ Tính Năng Nổi Bật
 
 ### ⚡ 1. Hỗ Trợ Multi-Engine OCR (Tri-Engine Architecture)
